@@ -1,5 +1,11 @@
 # Clouisle: Next-Gen Enterprise Distributed Intelligent Knowledge Platform
 
+[![CI Check](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml/badge.svg)](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0-orange)](https://bun.sh/)
+
 [中文文档](docs/README_zh-CN.md)
 
 ## Introduction
@@ -49,7 +55,7 @@ The platform adopts a microservices design, where core components (such as colle
 
 -   **backend/**: Python FastAPI application managed with `uv`.
 -   **frontend/**: Next.js application.
--   **docker-compose.yml**: Infrastructure (PostgreSQL + Redis).
+-   **deploy/docker-compose.yml**: Infrastructure (PostgreSQL + Redis).
 
 ### Getting Started
 
@@ -67,4 +73,4 @@ The platform adopts a microservices design, where core components (such as colle
 
 #### Infrastructure
 
-Run `docker-compose up -d` to start PostgreSQL and Redis.
+Run `docker-compose -f deploy/docker-compose.yml up -d` to start PostgreSQL and Redis.

@@ -1,5 +1,13 @@
 # 云屿 (Clouisle)：下一代企业级分布式智能知识平台
 
+[![CI Check](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml/badge.svg)](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0-orange)](https://bun.sh/)
+
+[English Documentation](../README.md)
+
 ## 简介
 
 云屿是一款基于分布式架构构建的企业级知识库与 AI Agent 智能平台，致力于将分散、异构的数据转化为可行动的知识，并通过智能体驱动业务决策与自动化。
@@ -47,7 +55,7 @@
 
 -   **backend/**: Python FastAPI 应用，使用 `uv` 管理。
 -   **frontend/**: Next.js 应用。
--   **docker-compose.yml**: 基础设施 (PostgreSQL + Redis)。
+-   **deploy/docker-compose.yml**: 基础设施 (PostgreSQL + Redis)。
 
 ### 快速开始
 
@@ -65,4 +73,4 @@
 
 #### 基础设施 (Infrastructure)
 
-运行 `docker-compose up -d` 启动 PostgreSQL 和 Redis。
+运行 `docker-compose -f deploy/docker-compose.yml up -d` 启动 PostgreSQL 和 Redis。

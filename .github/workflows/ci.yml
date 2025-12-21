@@ -1,0 +1,61 @@
+name: CI Check
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  backend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Set up Python
+      run: uv python install
+
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+
+    - name: Lint with Ruff
+      run: uv run ruff check .
+
+    - name: Format check with Ruff
+      run: uv run ruff format --check .
+
+    - name: Type check with Mypy
+      run: uv run mypy .
+
+    # - name: Run tests
+    #   run: uv run pytest
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
+    - name: Install dependencies
+      run: bun install
+
+    - name: Lint
+      run: bun run lint
+
+    - name: Build check
+      run: bun run build
