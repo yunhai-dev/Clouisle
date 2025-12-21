@@ -12,7 +12,7 @@ The project is structured as a monorepo separating the backend API and the front
 ### Directory Structure
 - `backend/`: Python FastAPI application
 - `frontend/`: Next.js application
-- `docker-compose.yml`: Infrastructure services (PostgreSQL, Redis)
+- `deploy/docker-compose.yml`: Infrastructure services (PostgreSQL, Redis)
 
 ---
 
@@ -117,5 +117,5 @@ bun dev
 
 ### Infrastructure
 ```bash
-docker-compose up -d
+docker-compose -f deploy/docker-compose.yml up -d
 ```

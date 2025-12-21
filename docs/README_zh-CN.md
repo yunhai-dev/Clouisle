@@ -55,7 +55,7 @@
 
 -   **backend/**: Python FastAPI 应用，使用 `uv` 管理。
 -   **frontend/**: Next.js 应用。
--   **docker-compose.yml**: 基础设施 (PostgreSQL + Redis)。
+-   **deploy/docker-compose.yml**: 基础设施 (PostgreSQL + Redis)。
 
 ### 快速开始
 
@@ -73,4 +73,4 @@
 
 #### 基础设施 (Infrastructure)
 
-运行 `docker-compose up -d` 启动 PostgreSQL 和 Redis。
+运行 `docker-compose -f deploy/docker-compose.yml up -d` 启动 PostgreSQL 和 Redis。

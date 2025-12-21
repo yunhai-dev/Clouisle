@@ -55,7 +55,7 @@ The platform adopts a microservices design, where core components (such as colle
 
 -   **backend/**: Python FastAPI application managed with `uv`.
 -   **frontend/**: Next.js application.
--   **docker-compose.yml**: Infrastructure (PostgreSQL + Redis).
+-   **deploy/docker-compose.yml**: Infrastructure (PostgreSQL + Redis).
 
 ### Getting Started
 
@@ -73,4 +73,4 @@ The platform adopts a microservices design, where core components (such as colle
 
 #### Infrastructure
 
-Run `docker-compose up -d` to start PostgreSQL and Redis.
+Run `docker-compose -f deploy/docker-compose.yml up -d` to start PostgreSQL and Redis.
