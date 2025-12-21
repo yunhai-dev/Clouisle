@@ -1,5 +1,13 @@
 # 云屿 (Clouisle)：下一代企业级分布式智能知识平台
 
+[![CI Check](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml/badge.svg)](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0-orange)](https://bun.sh/)
+
+[English Documentation](../README.md)
+
 ## 简介
 
 云屿是一款基于分布式架构构建的企业级知识库与 AI Agent 智能平台，致力于将分散、异构的数据转化为可行动的知识，并通过智能体驱动业务决策与自动化。

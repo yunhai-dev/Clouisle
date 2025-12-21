@@ -69,6 +69,13 @@ Defined in `frontend/package.json`
 
 ---
 
+## 🌐 Documentation Guidelines
+
+**Multi-language Synchronization**:
+When modifying project documentation (especially `README.md`), you **must** synchronously update the corresponding content in other language versions (e.g., `docs/README_zh-CN.md`) to maintain consistency.
+
+---
+
 ## 📝 Recent Actions Log
 
 1.  **Project Initialization**:
