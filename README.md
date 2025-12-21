@@ -1,5 +1,11 @@
 # Clouisle: Next-Gen Enterprise Distributed Intelligent Knowledge Platform
 
+[![CI Check](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml/badge.svg)](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0-orange)](https://bun.sh/)
+
 [中文文档](docs/README_zh-CN.md)
 
 ## Introduction
