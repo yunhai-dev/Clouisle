@@ -12,7 +12,6 @@ export default function SettingsLayout({
   children: React.ReactNode
 }) {
   const t = useTranslations('settings')
-  const tCommon = useTranslations('common')
   const pathname = usePathname()
 
   const settingsNav = [

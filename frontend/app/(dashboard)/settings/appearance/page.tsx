@@ -22,10 +22,10 @@ export default function AppearancePage() {
     setMounted(true)
   }, [])
 
-  const handleLocaleChange = (newLocale: Locale) => {
+  const handleLocaleChange = React.useCallback((newLocale: Locale) => {
     document.cookie = `locale=${newLocale};path=/;max-age=31536000`
     router.refresh()
-  }
+  }, [router])
 
   const themes = [
     { value: 'light', label: t('light') },

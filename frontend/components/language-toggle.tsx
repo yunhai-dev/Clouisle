@@ -5,7 +5,6 @@ import { Languages } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,12 +17,12 @@ export function LanguageToggle() {
   const locale = useLocale()
   const router = useRouter()
 
-  const handleLocaleChange = (newLocale: Locale) => {
+  const handleLocaleChange = React.useCallback((newLocale: Locale) => {
     // Set cookie
     document.cookie = `locale=${newLocale};path=/;max-age=31536000`
     // Refresh to apply new locale
     router.refresh()
-  }
+  }, [router])
 
   return (
     <DropdownMenu>

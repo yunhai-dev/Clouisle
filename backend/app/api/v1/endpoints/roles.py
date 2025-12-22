@@ -1,12 +1,10 @@
 from typing import Any, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from tortoise.exceptions import DoesNotExist, IntegrityError
 
 from app.api import deps
-from app.core.i18n import t
 from app.models.user import Role, Permission, User
 from app.schemas.user import Role as RoleSchema, RoleCreate
 from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success

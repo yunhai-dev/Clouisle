@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { locales, localeNames, type Locale } from '@/i18n/config'
-import { useSettings, type SidebarVariant, type LayoutVariant, type DirectionVariant } from '@/hooks/use-settings'
+import { useSettings } from '@/hooks/use-settings'
 
 interface SettingsDrawerProps {
   open: boolean
@@ -47,10 +47,10 @@ export function SettingsDrawer({ open, onOpenChange }: SettingsDrawerProps) {
   const effectiveLayoutVariant = mounted ? layoutVariant : 'default'
   const effectiveDirection = mounted ? direction : 'ltr'
 
-  const handleLocaleChange = (newLocale: Locale) => {
+  const handleLocaleChange = React.useCallback((newLocale: Locale) => {
     document.cookie = `locale=${newLocale};path=/;max-age=31536000`
     router.refresh()
-  }
+  }, [router])
 
   const handleReset = () => {
     setTheme('system')

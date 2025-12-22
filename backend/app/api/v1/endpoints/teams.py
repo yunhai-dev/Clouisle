@@ -1,11 +1,9 @@
 from typing import Any, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from tortoise.exceptions import DoesNotExist, IntegrityError
+from fastapi import APIRouter, Depends
 
 from app.api import deps
-from app.core.i18n import t
 from app.models.user import Team, TeamMember, User
 from app.schemas.team import (
     Team as TeamSchema,

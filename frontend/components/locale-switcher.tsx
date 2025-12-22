@@ -20,10 +20,10 @@ export function LocaleSwitcher({ showLabel = false }: LocaleSwitcherProps) {
   const locale = useLocale()
   const router = useRouter()
 
-  const handleLocaleChange = (newLocale: Locale) => {
+  const handleLocaleChange = React.useCallback((newLocale: Locale) => {
     document.cookie = `locale=${newLocale};path=/;max-age=31536000`
     router.refresh()
-  }
+  }, [router])
 
   return (
     <DropdownMenu>

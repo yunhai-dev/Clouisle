@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { X, Loader2, ImageIcon } from 'lucide-react'
@@ -97,7 +98,7 @@ export function ImageUpload({
       if (oldValue) {
         await tryDeleteOldFile(oldValue)
       }
-    } catch (error) {
+    } catch {
       // 错误已由 API 客户端处理
     } finally {
       setUploading(false)
@@ -142,10 +143,12 @@ export function ImageUpload({
         {uploading ? (
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         ) : value ? (
-          <img
+          <Image
             src={value}
             alt="Uploaded"
-            className="h-full w-full object-cover"
+            fill
+            className="object-cover"
+            unoptimized
           />
         ) : (
           placeholder || <ImageIcon className="h-8 w-8 text-muted-foreground/50" />

@@ -126,7 +126,7 @@ export function RegisterForm() {
       await authApi.resendVerification(email)
       setResendCooldown(60)
       toast.success(t('verificationEmailSent'))
-    } catch (err) {
+    } catch {
       // 错误已由拦截器处理
     }
   }

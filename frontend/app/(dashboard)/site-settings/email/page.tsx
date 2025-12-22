@@ -37,11 +37,7 @@ export default function SiteSettingsEmailPage() {
     email_from_address: '',
   })
 
-  React.useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
+  const loadSettings = React.useCallback(async () => {
     try {
       setLoading(true)
       const data = await siteSettingsApi.getEmail()
@@ -52,7 +48,11 @@ export default function SiteSettingsEmailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
+
+  React.useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
 
   const handleSave = async () => {
     try {

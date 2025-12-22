@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -150,10 +151,13 @@ export function AppSidebar({ variant = 'inset', collapsible = 'icon', side = 'le
               <SidebarMenuButton size="lg">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground overflow-hidden">
                   {siteSettings.site_icon ? (
-                    <img 
+                    <Image 
                       src={siteSettings.site_icon} 
                       alt={siteSettings.site_name} 
+                      width={32}
+                      height={32}
                       className="size-full object-cover"
+                      unoptimized
                     />
                   ) : (
                     <Globe className="size-5" />

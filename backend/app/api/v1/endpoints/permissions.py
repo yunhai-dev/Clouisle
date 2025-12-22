@@ -1,11 +1,9 @@
-from typing import Any, List
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from tortoise.exceptions import DoesNotExist, IntegrityError
+from fastapi import APIRouter, Depends
 
 from app.api import deps
-from app.core.i18n import t
 from app.models.user import Permission, User
 from app.schemas.user import Permission as PermissionSchema, PermissionCreate
 from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success

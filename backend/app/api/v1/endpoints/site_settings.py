@@ -1,11 +1,9 @@
-from typing import Any, Dict, List, Optional
-from uuid import UUID
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
-from tortoise.exceptions import DoesNotExist
 
-from app.api.deps import get_current_active_superuser, get_current_active_user
+from app.api.deps import get_current_active_superuser
 from app.models import SiteSetting, DEFAULT_SETTINGS, User
 from app.schemas.site_setting import (
     SiteSettingResponse,

@@ -1,15 +1,12 @@
 from typing import Any, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
-from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from pydantic import BaseModel, EmailStr
-from tortoise.exceptions import DoesNotExist, IntegrityError
 from tortoise.expressions import Q
 
 from app.api import deps
 from app.core import security
-from app.core.i18n import t
 from app.core.email import (
     send_email,
     check_bulk_email_rate,

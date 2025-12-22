@@ -1,14 +1,10 @@
-from typing import Generator, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import ValidationError
-from tortoise.exceptions import DoesNotExist
 
 from app.core.config import settings
-from app.core.security import settings as security_settings
-from app.core.i18n import t
 from app.core.redis import is_token_blacklisted
 from app.models.user import User
 from app.schemas.token import TokenPayload

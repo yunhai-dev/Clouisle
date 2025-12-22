@@ -6,7 +6,7 @@ import uuid
 import hashlib
 import aiofiles
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
 from fastapi.responses import FileResponse

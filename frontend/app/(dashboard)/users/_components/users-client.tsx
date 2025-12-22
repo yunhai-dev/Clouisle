@@ -350,11 +350,6 @@ export function UsersClient() {
     }
   }
   
-  // 获取用户名首字母
-  const getInitials = (name: string) => {
-    return name.slice(0, 2).toUpperCase()
-  }
-  
   // 获取状态 Badge
   const getStatusBadge = (user: User) => {
     if (user.is_active) {

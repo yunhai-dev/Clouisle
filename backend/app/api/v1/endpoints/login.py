@@ -2,14 +2,12 @@ from datetime import timedelta
 from typing import Any, Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Form
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, Request, BackgroundTasks, Form
 from tortoise.exceptions import DoesNotExist
 
 from app.api import deps
 from app.core import security
 from app.core.config import settings
-from app.core.i18n import t
 from app.core.redis import add_token_to_blacklist, invalidate_user_session, set_user_session
 from app.core.password import validate_password
 from app.core.login_security import (
@@ -35,7 +33,6 @@ from app.schemas.captcha import CaptchaResponse
 from app.schemas.verification import (
     SendVerificationRequest,
     VerifyCodeRequest,
-    VerifyTokenRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
     ResetPasswordConfirmRequest,

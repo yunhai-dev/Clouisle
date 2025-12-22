@@ -72,7 +72,7 @@ export default function ProfilePage() {
       const updatedUser = await usersApi.updateProfile(updateData)
       setUser(updatedUser)
       toast.success(t('profileUpdated'))
-    } catch (error) {
+    } catch {
       // 错误已由 API 客户端处理
     } finally {
       setSaving(false)

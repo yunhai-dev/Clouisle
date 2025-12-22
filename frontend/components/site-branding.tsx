@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { Globe } from 'lucide-react'
 import { useSiteSettings } from '@/contexts/site-settings-context'
 
@@ -43,10 +44,13 @@ export function SiteBranding({ size = 'md', showDescription = false, className =
     <div className={`flex flex-col items-center gap-2 ${className}`}>
       <div className={`${iconSizes[size]} rounded-lg bg-primary text-primary-foreground flex items-center justify-center overflow-hidden`}>
         {settings.site_icon ? (
-          <img 
+          <Image 
             src={settings.site_icon} 
             alt={settings.site_name} 
+            width={64}
+            height={64}
             className="size-full object-cover"
+            unoptimized
           />
         ) : (
           <Globe className="size-1/2" />

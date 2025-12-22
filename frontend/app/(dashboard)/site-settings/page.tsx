@@ -32,11 +32,7 @@ export default function SiteSettingsGeneralPage() {
     allow_account_deletion: true,
   })
 
-  React.useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
+  const loadSettings = React.useCallback(async () => {
     try {
       setLoading(true)
       const data = await siteSettingsApi.getGeneral()
@@ -47,7 +43,11 @@ export default function SiteSettingsGeneralPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
+
+  React.useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
 
   const handleSave = async () => {
     try {

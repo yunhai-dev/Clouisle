@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { User, Role } from './auth'
+import type { User } from './auth'
 
 export interface PageData<T> {
   items: T[]

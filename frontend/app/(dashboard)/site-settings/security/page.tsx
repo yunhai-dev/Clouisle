@@ -29,11 +29,7 @@ export default function SiteSettingsSecurityPage() {
     enable_captcha: false,
   })
 
-  React.useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
+  const loadSettings = React.useCallback(async () => {
     try {
       setLoading(true)
       const data = await siteSettingsApi.getSecurity()
@@ -44,7 +40,11 @@ export default function SiteSettingsSecurityPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
+
+  React.useEffect(() => {
+    loadSettings()
+  }, [loadSettings])
 
   const handleSave = async () => {
     try {

@@ -506,7 +506,7 @@ def set_language(lang: str) -> None:
     """Set current language in context variable"""
     # Normalize language code
     lang = lang.lower().split("-")[0]  # "zh-CN" -> "zh"
-    if lang not in [l.value for l in Language]:
+    if lang not in [lang_enum.value for lang_enum in Language]:
         lang = Language.EN.value
     current_language.set(lang)
 
@@ -528,7 +528,7 @@ def t(key: str, lang: Optional[str] = None, **kwargs) -> str:
     
     # Normalize language code
     lang = lang.lower().split("-")[0]
-    if lang not in [l.value for l in Language]:
+    if lang not in [lang_enum.value for lang_enum in Language]:
         lang = Language.EN.value
     
     # Get translation

@@ -72,7 +72,7 @@ export default function AccountPage() {
         newPassword: '',
         confirmPassword: '',
       })
-    } catch (error) {
+    } catch {
       // 错误已由 API 客户端处理
     } finally {
       setSaving(false)
@@ -92,7 +92,7 @@ export default function AccountPage() {
       // 清除本地存储并跳转到登录页
       localStorage.removeItem('access_token')
       router.push('/login')
-    } catch (error) {
+    } catch {
       // 错误已由 API 客户端处理
     } finally {
       setDeleting(false)
