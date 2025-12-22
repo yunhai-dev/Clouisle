@@ -7,10 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Clouisle"
     API_V1_STR: str = "/api/v1"
-    
+
     # Timezone
     TIMEZONE: str = "Asia/Shanghai"
-    
+
     # Security
     SECRET_KEY: str = "changethis-to-a-secure-random-secret-key"
     ALGORITHM: str = "HS256"

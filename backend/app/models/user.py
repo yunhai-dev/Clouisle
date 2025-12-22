@@ -3,8 +3,14 @@ from tortoise import fields, models
 
 class Permission(models.Model):
     id = fields.UUIDField(pk=True)
-    scope = fields.CharField(max_length=50, description="Permission scope (e.g., user, kb)")
-    code = fields.CharField(max_length=100, unique=True, description="Unique permission code (e.g., user:create)")
+    scope = fields.CharField(
+        max_length=50, description="Permission scope (e.g., user, kb)"
+    )
+    code = fields.CharField(
+        max_length=100,
+        unique=True,
+        description="Unique permission code (e.g., user:create)",
+    )
     description = fields.CharField(max_length=255, null=True)
 
     class Meta:
@@ -18,8 +24,12 @@ class Role(models.Model):
     id = fields.UUIDField(pk=True)
     name = fields.CharField(max_length=50, unique=True)
     description = fields.CharField(max_length=255, null=True)
-    is_system_role = fields.BooleanField(default=False, description="If True, cannot be deleted/modified")
-    permissions = fields.ManyToManyField("models.Permission", related_name="roles", through="role_permissions")
+    is_system_role = fields.BooleanField(
+        default=False, description="If True, cannot be deleted/modified"
+    )
+    permissions = fields.ManyToManyField(
+        "models.Permission", related_name="roles", through="role_permissions"
+    )
 
     class Meta:
         table = "roles"
@@ -30,14 +40,17 @@ class Role(models.Model):
 
 class Team(models.Model):
     """团队模型 - 用于资源隔离和协作"""
+
     id = fields.UUIDField(pk=True)
     name = fields.CharField(max_length=100, unique=True)
     description = fields.CharField(max_length=500, null=True)
     avatar_url = fields.CharField(max_length=512, null=True)
-    is_default = fields.BooleanField(default=False, description="Default team for new users")
+    is_default = fields.BooleanField(
+        default=False, description="Default team for new users"
+    )
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
-    
+
     # Team owner (creator)
     owner: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
         "models.User", related_name="owned_teams", null=True, on_delete=fields.SET_NULL
@@ -52,6 +65,7 @@ class Team(models.Model):
 
 class TeamMember(models.Model):
     """团队成员关联表 - 包含成员角色"""
+
     id = fields.UUIDField(pk=True)
     team: fields.ForeignKeyRelation[Team] = fields.ForeignKeyField(
         "models.Team", related_name="memberships", on_delete=fields.CASCADE
@@ -59,7 +73,9 @@ class TeamMember(models.Model):
     user: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
         "models.User", related_name="team_memberships", on_delete=fields.CASCADE
     )
-    role = fields.CharField(max_length=20, default="member", description="owner, admin, member, viewer")
+    role = fields.CharField(
+        max_length=20, default="member", description="owner, admin, member, viewer"
+    )
     joined_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
@@ -77,18 +93,32 @@ class User(models.Model):
     hashed_password = fields.CharField(max_length=255)
     is_active = fields.BooleanField(default=True)
     is_superuser = fields.BooleanField(default=False)
-    email_verified = fields.BooleanField(default=False, description="Email verification status")
+    email_verified = fields.BooleanField(
+        default=False, description="Email verification status"
+    )
     created_at = fields.DatetimeField(auto_now_add=True)
     last_login = fields.DatetimeField(null=True)
-    failed_login_attempts = fields.IntField(default=0, description="Failed login attempts count")
-    locked_until = fields.DatetimeField(null=True, description="Account locked until this time")
-    
+    failed_login_attempts = fields.IntField(
+        default=0, description="Failed login attempts count"
+    )
+    locked_until = fields.DatetimeField(
+        null=True, description="Account locked until this time"
+    )
+
     # Extended fields
-    auth_source = fields.CharField(max_length=20, default="local", description="Auth source: local, ldap, github, etc.")
-    external_id = fields.CharField(max_length=255, null=True, description="ID from external auth provider")
+    auth_source = fields.CharField(
+        max_length=20,
+        default="local",
+        description="Auth source: local, ldap, github, etc.",
+    )
+    external_id = fields.CharField(
+        max_length=255, null=True, description="ID from external auth provider"
+    )
     avatar_url = fields.CharField(max_length=512, null=True)
 
-    roles = fields.ManyToManyField("models.Role", related_name="users", through="user_roles")
+    roles = fields.ManyToManyField(
+        "models.Role", related_name="users", through="user_roles"
+    )
     # Teams relation is through TeamMember model (user.team_memberships)
 
     class Meta:

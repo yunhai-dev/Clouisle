@@ -45,10 +45,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         # 跳过 'body' 前缀，获取字段名
         field_parts = [str(part) for part in loc if part != "body"]
         field = ".".join(field_parts) if field_parts else "unknown"
-        
+
         # 获取错误消息
         msg = err.get("msg", "Invalid value")
-        
+
         # 如果同一字段有多个错误，用列表存储
         if field in errors:
             if isinstance(errors[field], list):
@@ -57,7 +57,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 errors[field] = [errors[field], msg]
         else:
             errors[field] = msg
-    
+
     return JSONResponse(
         status_code=422,
         content=error(
@@ -83,7 +83,7 @@ async def business_exception_handler(request: Request, exc: BusinessError):
         msg = get_code_message(exc.code)
     else:
         msg = t("unknown_error")
-    
+
     return JSONResponse(
         status_code=exc.status_code,
         content=error(
@@ -108,7 +108,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         404: ResponseCode.NOT_FOUND,
     }
     response_code = code_map.get(exc.status_code, ResponseCode.UNKNOWN_ERROR)
-    
+
     return JSONResponse(
         status_code=exc.status_code,
         content=error(
@@ -122,12 +122,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
-        
+
         # 获取请求信息
         method = request.method
         url = str(request.url)
         client_ip = request.client.host if request.client else "unknown"
-        
+
         # 读取请求体（只对 POST/PUT/PATCH 请求）
         request_body = None
         if method in ["POST", "PUT", "PATCH"]:
@@ -147,19 +147,21 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                         request_body = "<form-data>"
             except Exception:
                 request_body = "<parse-error>"
-        
+
         # 打印请求日志
         logger.info(f">>> {method} {url} | IP: {client_ip}")
         if request_body:
-            logger.info(f"    Request Body: {json.dumps(request_body, ensure_ascii=False)}")
-        
+            logger.info(
+                f"    Request Body: {json.dumps(request_body, ensure_ascii=False)}"
+            )
+
         # 处理请求
         try:
             response = await call_next(request)
-            
+
             # 计算耗时
             duration = time.time() - start_time
-            
+
             # 对于错误响应（4xx, 5xx），读取并打印响应内容
             response_body = None
             if response.status_code >= 400:
@@ -167,40 +169,49 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 response_body_bytes = b""
                 async for chunk in response.body_iterator:
                     response_body_bytes += chunk
-                
+
                 try:
                     response_body = json.loads(response_body_bytes.decode("utf-8"))
                 except Exception:
-                    response_body = response_body_bytes.decode("utf-8", errors="replace")
-                
+                    response_body = response_body_bytes.decode(
+                        "utf-8", errors="replace"
+                    )
+
                 # 重新创建响应（因为body_iterator已被消费）
                 from starlette.responses import Response as StarletteResponse
+
                 response = StarletteResponse(
                     content=response_body_bytes,
                     status_code=response.status_code,
                     headers=dict(response.headers),
                     media_type=response.media_type,
                 )
-            
+
             # 打印响应日志
             if response.status_code >= 400:
-                logger.warning(f"<<< {method} {url} | Status: {response.status_code} | Duration: {duration:.3f}s")
+                logger.warning(
+                    f"<<< {method} {url} | Status: {response.status_code} | Duration: {duration:.3f}s"
+                )
                 if response_body:
-                    logger.warning(f"    Response Body: {json.dumps(response_body, ensure_ascii=False) if isinstance(response_body, (dict, list)) else response_body}")
+                    logger.warning(
+                        f"    Response Body: {json.dumps(response_body, ensure_ascii=False) if isinstance(response_body, (dict, list)) else response_body}"
+                    )
             else:
-                logger.info(f"<<< {method} {url} | Status: {response.status_code} | Duration: {duration:.3f}s")
-            
+                logger.info(
+                    f"<<< {method} {url} | Status: {response.status_code} | Duration: {duration:.3f}s"
+                )
+
             return response
-            
+
         except Exception as e:
             # 计算耗时
             duration = time.time() - start_time
-            
+
             # 打印错误日志
             logger.error(f"<<< {method} {url} | Error | Duration: {duration:.3f}s")
             logger.error(f"    Exception: {str(e)}")
             logger.error(f"    Traceback:\n{traceback.format_exc()}")
-            
+
             # 返回错误响应
             return JSONResponse(
                 status_code=500,
@@ -212,7 +223,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 class LanguageMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Get language from Accept-Language header or X-Language header
-        lang = request.headers.get("X-Language") or request.headers.get("Accept-Language", "en")
+        lang = request.headers.get("X-Language") or request.headers.get(
+            "Accept-Language", "en"
+        )
         # Parse Accept-Language (e.g., "zh-CN,zh;q=0.9,en;q=0.8" -> "zh")
         lang = lang.split(",")[0].split(";")[0].strip()
         set_language(lang)
@@ -224,7 +237,9 @@ class LanguageMiddleware(BaseHTTPMiddleware):
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_origins=[
+            str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -244,11 +259,13 @@ async def root():
 # Register Tortoise
 register_tortoise(
     app,
-    db_url=settings.DATABASE_URL or f"postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}",
+    db_url=settings.DATABASE_URL
+    or f"postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}",
     modules={"models": ["app.models"]},
     generate_schemas=True,
     add_exception_handlers=True,
 )
+
 
 @app.on_event("startup")
 async def startup_event():

@@ -1,4 +1,3 @@
-
 import jwt
 from fastapi import Depends, status
 from fastapi.security import OAuth2PasswordBearer
@@ -23,7 +22,7 @@ async def get_current_user(token: str = Depends(reusable_oauth2)) -> User:
             msg_key="token_revoked",
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
-    
+
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
@@ -35,22 +34,26 @@ async def get_current_user(token: str = Depends(reusable_oauth2)) -> User:
             msg_key="could_not_validate_credentials",
             status_code=status.HTTP_403_FORBIDDEN,
         )
-    
+
     if token_data.sub is None:
         raise BusinessError(
             code=ResponseCode.USER_NOT_FOUND,
             msg_key="user_not_found",
             status_code=status.HTTP_404_NOT_FOUND,
         )
-        
-    user = await User.filter(id=token_data.sub).prefetch_related("roles__permissions").first()
+
+    user = (
+        await User.filter(id=token_data.sub)
+        .prefetch_related("roles__permissions")
+        .first()
+    )
     if not user:
         raise BusinessError(
             code=ResponseCode.USER_NOT_FOUND,
             msg_key="user_not_found",
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    
+
     return user
 
 
@@ -81,23 +84,28 @@ class PermissionChecker:
     def __init__(self, required_permission: str):
         self.required_permission = required_permission
 
-    async def __call__(self, current_user: User = Depends(get_current_active_user)) -> User:
+    async def __call__(
+        self, current_user: User = Depends(get_current_active_user)
+    ) -> User:
         if current_user.is_superuser:
             return current_user
 
         # Check permissions
         # Since we prefetched roles and permissions, we can check in memory
         # Note: roles__permissions is a list of Permission objects
-        
+
         has_permission = False
         for role in current_user.roles:
             for permission in role.permissions:
-                if permission.code == self.required_permission or permission.code == "*":
+                if (
+                    permission.code == self.required_permission
+                    or permission.code == "*"
+                ):
                     has_permission = True
                     break
             if has_permission:
                 break
-        
+
         if not has_permission:
             raise BusinessError(
                 code=ResponseCode.PERMISSION_DENIED,
@@ -105,5 +113,5 @@ class PermissionChecker:
                 status_code=status.HTTP_403_FORBIDDEN,
                 permission=self.required_permission,
             )
-        
+
         return current_user

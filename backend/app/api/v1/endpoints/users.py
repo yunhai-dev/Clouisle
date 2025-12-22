@@ -17,7 +17,13 @@ from app.core.email import (
 from app.models.user import User, Role
 from app.models.site_setting import SiteSetting
 from app.schemas.user import User as UserSchema, UserCreate, UserUpdate
-from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success
+from app.schemas.response import (
+    Response,
+    PageData,
+    ResponseCode,
+    BusinessError,
+    success,
+)
 
 router = APIRouter()
 
@@ -26,7 +32,9 @@ router = APIRouter()
 async def read_users(
     page: int = 1,
     page_size: int = 20,
-    status: Optional[str] = Query(None, description="Filter by status: active, inactive, pending"),
+    status: Optional[str] = Query(
+        None, description="Filter by status: active, inactive, pending"
+    ),
     search: Optional[str] = Query(None, description="Search by username or email"),
     current_user: User = Depends(deps.PermissionChecker("user:read")),
 ) -> Any:
@@ -34,10 +42,10 @@ async def read_users(
     Retrieve users with optional filters.
     """
     skip = (page - 1) * page_size
-    
+
     # Build query
     query = User.all()
-    
+
     # Status filter
     if status == "active":
         query = query.filter(is_active=True)
@@ -46,21 +54,23 @@ async def read_users(
     elif status == "pending":
         # Pending = inactive and email not verified (newly registered, waiting for approval)
         query = query.filter(is_active=False)
-    
+
     # Search filter
     if search:
-        query = query.filter(
-            Q(username__icontains=search) | Q(email__icontains=search)
-        )
-    
+        query = query.filter(Q(username__icontains=search) | Q(email__icontains=search))
+
     total = await query.count()
-    users = await query.offset(skip).limit(page_size).prefetch_related("roles__permissions")
-    return success(data={
-        "items": users,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    users = (
+        await query.offset(skip).limit(page_size).prefetch_related("roles__permissions")
+    )
+    return success(
+        data={
+            "items": users,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.get("/stats", response_model=Response[dict])
@@ -74,13 +84,15 @@ async def get_user_stats(
     active = await User.filter(is_active=True).count()
     inactive = await User.filter(is_active=False).count()
     pending = await User.filter(is_active=False).count()  # Pending approval
-    
-    return success(data={
-        "total": total,
-        "active": active,
-        "inactive": inactive,
-        "pending": pending,
-    })
+
+    return success(
+        data={
+            "total": total,
+            "active": active,
+            "inactive": inactive,
+            "pending": pending,
+        }
+    )
 
 
 @router.post("/", response_model=Response[UserSchema])
@@ -98,7 +110,7 @@ async def create_user(
             code=ResponseCode.USERNAME_EXISTS,
             msg_key="user_with_username_exists",
         )
-    
+
     existing_email = await User.filter(email=user_in.email).first()
     if existing_email:
         raise BusinessError(
@@ -109,7 +121,7 @@ async def create_user(
     user_dict = user_in.model_dump(exclude_unset=True)
     password = user_dict.pop("password")
     hashed_password = security.get_password_hash(password)
-    
+
     user = await User.create(
         **user_dict,
         hashed_password=hashed_password,
@@ -120,6 +132,7 @@ async def create_user(
 
 class SendEmailRequest(BaseModel):
     """发送邮件请求"""
+
     subject: str
     content: str
     user_ids: List[UUID]
@@ -142,7 +155,7 @@ async def send_email_to_users(
             code=ResponseCode.EMAIL_SEND_FAILED,
             msg_key="smtp_not_configured",
         )
-    
+
     # Check sender rate limit (100 emails per hour)
     can_send, sent_count_hour, remaining = await check_bulk_email_rate(
         str(current_user.id), max_per_hour=100
@@ -153,7 +166,7 @@ async def send_email_to_users(
             msg_key="email_rate_limit_exceeded",
             data={"limit": 100, "period": "hour"},
         )
-    
+
     # Get users
     users = await User.filter(id__in=data.user_ids).all()
     if not users:
@@ -161,7 +174,7 @@ async def send_email_to_users(
             code=ResponseCode.NOT_FOUND,
             msg_key="user_not_found",
         )
-    
+
     # Check if we have enough quota
     if len(users) > remaining:
         raise BusinessError(
@@ -169,21 +182,21 @@ async def send_email_to_users(
             msg_key="email_quota_insufficient",
             data={"requested": len(users), "remaining": remaining},
         )
-    
+
     # Filter out rate-limited recipients (5 emails per day per recipient)
     sent_count = 0
     skipped_count = 0
-    
+
     for user in users:
         if not user.email:
             continue
-            
+
         # Check recipient rate limit
         can_receive, _ = await check_recipient_email_rate(user.email, max_per_day=5)
         if not can_receive:
             skipped_count += 1
             continue
-        
+
         # Queue email for sending
         background_tasks.add_task(
             send_email,
@@ -197,15 +210,15 @@ async def send_email_to_users(
             </div>
             """,
         )
-        
+
         # Increment recipient count
         await increment_recipient_email_count(user.email)
         sent_count += 1
-    
+
     # Increment sender count
     if sent_count > 0:
         await increment_bulk_email_count(str(current_user.id), sent_count)
-    
+
     return success(
         data={
             "sent_count": sent_count,
@@ -233,13 +246,13 @@ async def update_user(
             msg_key="user_with_id_not_exists",
             status_code=404,
         )
-        
+
     user_data = user_in.model_dump(exclude_unset=True)
-    
+
     if "password" in user_data:
         password = user_data.pop("password")
         user_data["hashed_password"] = security.get_password_hash(password)
-        
+
     if "roles" in user_data:
         role_names = user_data.pop("roles")
         roles = []
@@ -252,7 +265,7 @@ async def update_user(
 
     await user.update_from_dict(user_data)
     await user.save()
-    
+
     # Refresh to get updated relations
     updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
     return success(data=updated_user, msg_key="user_updated")
@@ -270,6 +283,7 @@ async def read_user_me(
 
 class UpdateProfileRequest(BaseModel):
     """更新个人资料请求"""
+
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     avatar_url: Optional[str] = None
@@ -285,7 +299,7 @@ async def update_user_me(
     Update current user profile.
     """
     update_data = data.model_dump(exclude_unset=True)
-    
+
     # Check username uniqueness
     if "username" in update_data and update_data["username"] != current_user.username:
         existing = await User.filter(username=update_data["username"]).first()
@@ -294,7 +308,7 @@ async def update_user_me(
                 code=ResponseCode.USERNAME_EXISTS,
                 msg_key="user_with_username_exists",
             )
-    
+
     # Check email uniqueness
     if "email" in update_data and update_data["email"] != current_user.email:
         existing = await User.filter(email=update_data["email"]).first()
@@ -305,16 +319,19 @@ async def update_user_me(
             )
         # If email changed, mark as unverified
         update_data["email_verified"] = False
-    
+
     await current_user.update_from_dict(update_data)
     await current_user.save()
-    
-    updated_user = await User.get(id=current_user.id).prefetch_related("roles__permissions")
+
+    updated_user = await User.get(id=current_user.id).prefetch_related(
+        "roles__permissions"
+    )
     return success(data=updated_user, msg_key="profile_updated")
 
 
 class ChangePasswordRequest(BaseModel):
     """修改密码请求"""
+
     current_password: str
     new_password: str
 
@@ -329,28 +346,31 @@ async def change_password(
     Change current user password.
     """
     # Verify current password
-    if not security.verify_password(data.current_password, current_user.hashed_password):
+    if not security.verify_password(
+        data.current_password, current_user.hashed_password
+    ):
         raise BusinessError(
             code=ResponseCode.INVALID_CREDENTIALS,
             msg_key="current_password_incorrect",
         )
-    
+
     # Validate new password length
     if len(data.new_password) < 6:
         raise BusinessError(
             code=ResponseCode.VALIDATION_ERROR,
             msg_key="password_too_short",
         )
-    
+
     # Update password
     current_user.hashed_password = security.get_password_hash(data.new_password)
     await current_user.save()
-    
+
     return success(msg_key="password_changed")
 
 
 class DeleteAccountRequest(BaseModel):
     """删除账号请求"""
+
     password: str
 
 
@@ -370,24 +390,24 @@ async def delete_account(
             code=ResponseCode.FORBIDDEN,
             msg_key="account_deletion_disabled",
         )
-    
+
     # Superuser cannot delete their own account
     if current_user.is_superuser:
         raise BusinessError(
             code=ResponseCode.FORBIDDEN,
             msg_key="cannot_delete_superuser_account",
         )
-    
+
     # Verify password
     if not security.verify_password(data.password, current_user.hashed_password):
         raise BusinessError(
             code=ResponseCode.INVALID_CREDENTIALS,
             msg_key="current_password_incorrect",
         )
-    
+
     # Delete user
     await current_user.delete()
-    
+
     return success(msg_key="account_deleted")
 
 
@@ -424,16 +444,16 @@ async def activate_user(
             msg_key="user_with_id_not_exists",
             status_code=404,
         )
-    
+
     if user.is_active:
         raise BusinessError(
             code=ResponseCode.USER_ALREADY_ACTIVE,
             msg_key="user_already_active",
         )
-    
+
     user.is_active = True
     await user.save()
-    
+
     updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
     return success(data=updated_user, msg_key="user_activated")
 
@@ -453,22 +473,22 @@ async def deactivate_user(
             msg_key="user_with_id_not_exists",
             status_code=404,
         )
-    
+
     if user.is_superuser:
         raise BusinessError(
             code=ResponseCode.CANNOT_DEACTIVATE_SUPERUSER,
             msg_key="cannot_deactivate_superuser",
         )
-    
+
     if not user.is_active:
         raise BusinessError(
             code=ResponseCode.USER_ALREADY_INACTIVE,
             msg_key="user_already_inactive",
         )
-    
+
     user.is_active = False
     await user.save()
-    
+
     updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
     return success(data=updated_user, msg_key="user_deactivated")
 
@@ -488,7 +508,7 @@ async def delete_user(
             msg_key="user_with_id_not_exists",
             status_code=404,
         )
-    
+
     if user.is_superuser:
         raise BusinessError(
             code=ResponseCode.CANNOT_DELETE_SUPERUSER,

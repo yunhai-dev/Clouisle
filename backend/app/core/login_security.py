@@ -2,6 +2,7 @@
 登录安全模块
 处理登录尝试限制、账号锁定等
 """
+
 from datetime import timedelta
 from typing import Optional, Tuple
 
@@ -18,18 +19,18 @@ LOGIN_ATTEMPTS_PREFIX = "login:attempts:"
 async def check_account_locked(user: User) -> Tuple[bool, Optional[int]]:
     """
     检查账号是否被锁定
-    
+
     Returns:
         Tuple[bool, Optional[int]]: (是否锁定, 剩余锁定秒数)
     """
     if user.locked_until is None:
         return False, None
-    
+
     now = now_utc()
     if user.locked_until > now:
         remaining = int((user.locked_until - now).total_seconds())
         return True, remaining
-    
+
     # 锁定已过期，重置
     user.locked_until = None
     user.failed_login_attempts = 0
@@ -40,24 +41,24 @@ async def check_account_locked(user: User) -> Tuple[bool, Optional[int]]:
 async def record_failed_login(user: User) -> Tuple[bool, int, Optional[int]]:
     """
     记录登录失败
-    
+
     Returns:
         Tuple[bool, int, Optional[int]]: (是否被锁定, 剩余尝试次数, 锁定秒数)
     """
     # 获取安全设置
     max_attempts = await SiteSetting.get_value("max_login_attempts", 5)
     lockout_minutes = await SiteSetting.get_value("lockout_duration_minutes", 15)
-    
+
     # 增加失败次数
     user.failed_login_attempts += 1
     remaining_attempts = max(0, max_attempts - user.failed_login_attempts)
-    
+
     # 检查是否需要锁定
     if user.failed_login_attempts >= max_attempts:
         user.locked_until = now_utc() + timedelta(minutes=lockout_minutes)
         await user.save()
         return True, 0, lockout_minutes * 60
-    
+
     await user.save()
     return False, remaining_attempts, None
 

@@ -29,6 +29,7 @@ class SiteSettingsResponse(BaseModel):
 
 class PublicSiteSettingsResponse(BaseModel):
     """Public settings visible to unauthenticated users"""
+
     site_name: str = "Clouisle"
     site_description: str = ""
     site_url: str = ""

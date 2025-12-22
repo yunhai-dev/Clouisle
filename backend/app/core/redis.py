@@ -1,6 +1,7 @@
 """
 Redis 连接和 Token 黑名单管理
 """
+
 import redis.asyncio as redis
 from typing import Optional
 
@@ -38,7 +39,7 @@ async def close_redis():
 async def add_token_to_blacklist(token: str, expires_in: int):
     """
     将 token 添加到黑名单
-    
+
     Args:
         token: JWT token
         expires_in: 过期时间（秒），通常设置为 token 的剩余有效期
@@ -51,10 +52,10 @@ async def add_token_to_blacklist(token: str, expires_in: int):
 async def is_token_blacklisted(token: str) -> bool:
     """
     检查 token 是否在黑名单中
-    
+
     Args:
         token: JWT token
-        
+
     Returns:
         True 如果 token 在黑名单中
     """
@@ -67,7 +68,7 @@ async def is_token_blacklisted(token: str) -> bool:
 async def set_user_session(user_id: str, token: str, expires_in: int):
     """
     设置用户当前会话（用于单一会话模式）
-    
+
     Args:
         user_id: 用户 ID
         token: JWT token
@@ -81,10 +82,10 @@ async def set_user_session(user_id: str, token: str, expires_in: int):
 async def get_user_session(user_id: str) -> Optional[str]:
     """
     获取用户当前会话 token
-    
+
     Args:
         user_id: 用户 ID
-        
+
     Returns:
         当前有效的 token，如果没有则返回 None
     """
@@ -96,19 +97,19 @@ async def get_user_session(user_id: str) -> Optional[str]:
 async def invalidate_user_session(user_id: str, token_expires_in: int = 86400 * 30):
     """
     使用户当前会话失效（踢出旧会话）
-    
+
     Args:
         user_id: 用户 ID
         token_expires_in: 旧 token 的剩余有效期估计值（默认30天）
     """
     r = await get_redis()
     key = f"{USER_SESSION_PREFIX}{user_id}"
-    
+
     # 获取旧 token 并加入黑名单
     old_token = await r.get(key)
     if old_token:
         await add_token_to_blacklist(old_token, token_expires_in)
-    
+
     # 删除用户会话记录
     await r.delete(key)
 
@@ -116,7 +117,7 @@ async def invalidate_user_session(user_id: str, token_expires_in: int = 86400 * 
 async def clear_user_session(user_id: str):
     """
     清除用户会话记录（不加入黑名单，仅清除记录）
-    
+
     Args:
         user_id: 用户 ID
     """

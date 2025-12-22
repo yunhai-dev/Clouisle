@@ -8,27 +8,28 @@ T = TypeVar("T")
 
 class ResponseCode(IntEnum):
     """响应状态码枚举"""
+
     # 成功
     SUCCESS = 0
-    
+
     # 通用错误 (1000-1999)
     UNKNOWN_ERROR = 1000
     VALIDATION_ERROR = 1001
-    
+
     # 认证错误 (2000-2999)
     UNAUTHORIZED = 2000
     INVALID_TOKEN = 2001
     TOKEN_EXPIRED = 2002
     INVALID_CREDENTIALS = 2003
     INACTIVE_USER = 2004
-    
+
     # 权限错误 (3000-3999)
     PERMISSION_DENIED = 3000
     INSUFFICIENT_PRIVILEGES = 3001
     NOT_TEAM_MEMBER = 3002
     TEAM_ADMIN_REQUIRED = 3003
     TEAM_OWNER_REQUIRED = 3004
-    
+
     # 资源错误 (4000-4999)
     NOT_FOUND = 4000
     USER_NOT_FOUND = 4001
@@ -36,7 +37,7 @@ class ResponseCode(IntEnum):
     PERMISSION_NOT_FOUND = 4003
     TEAM_NOT_FOUND = 4004
     TEAM_MEMBER_NOT_FOUND = 4005
-    
+
     # 注册相关错误 (5000-5099)
     REGISTRATION_DISABLED = 5000
     ALREADY_EXISTS = 5001
@@ -67,13 +68,13 @@ class ResponseCode(IntEnum):
     USER_ALREADY_ACTIVE = 5211
     USER_ALREADY_INACTIVE = 5212
     CANNOT_DEACTIVATE_SUPERUSER = 5213
-    
+
     # 登录安全错误 (5300-5399)
     ACCOUNT_LOCKED = 5300
     TOO_MANY_LOGIN_ATTEMPTS = 5301
     CAPTCHA_REQUIRED = 5302
     CAPTCHA_INVALID = 5303
-    
+
     # 速率限制错误 (5400-5499)
     RATE_LIMITED = 5400
 
@@ -81,15 +82,16 @@ class ResponseCode(IntEnum):
 class BusinessError(Exception):
     """
     业务逻辑异常
-    
+
     用于在接口中抛出业务错误，会被全局异常处理器捕获并转换为统一响应格式。
-    
+
     Usage:
         raise BusinessError(
             code=ResponseCode.USERNAME_EXISTS,
             msg_key="username_already_registered"
         )
     """
+
     def __init__(
         self,
         code: ResponseCode | int = ResponseCode.UNKNOWN_ERROR,
@@ -97,7 +99,7 @@ class BusinessError(Exception):
         msg_key: str | None = None,
         status_code: int = 400,
         data: Any = None,
-        **kwargs
+        **kwargs,
     ):
         self.code = code
         self.msg = msg
@@ -110,6 +112,7 @@ class BusinessError(Exception):
 
 class Response(BaseModel, Generic[T]):
     """统一响应格式"""
+
     code: int = ResponseCode.SUCCESS
     data: Optional[T] = None
     msg: str = "success"
@@ -117,6 +120,7 @@ class Response(BaseModel, Generic[T]):
 
 class PageData(BaseModel, Generic[T]):
     """分页数据"""
+
     items: list[T]
     total: int
     page: int
@@ -125,14 +129,17 @@ class PageData(BaseModel, Generic[T]):
 
 class PageResponse(Response[PageData[T]], Generic[T]):
     """分页响应"""
+
     pass
 
 
 # 便捷函数
-def success(data: Any = None, msg: str | None = None, msg_key: str = "success", **kwargs) -> dict:
+def success(
+    data: Any = None, msg: str | None = None, msg_key: str = "success", **kwargs
+) -> dict:
     """
     成功响应
-    
+
     Args:
         data: 响应数据
         msg: 直接指定消息（优先级高于msg_key）
@@ -140,22 +147,22 @@ def success(data: Any = None, msg: str | None = None, msg_key: str = "success", 
         **kwargs: 消息格式化参数
     """
     from app.core.i18n import t
-    
+
     if msg is None:
         msg = t(msg_key, **kwargs)
     return {"code": ResponseCode.SUCCESS, "data": data, "msg": msg}
 
 
 def error(
-    code: ResponseCode | int = ResponseCode.UNKNOWN_ERROR, 
+    code: ResponseCode | int = ResponseCode.UNKNOWN_ERROR,
     msg: str | None = None,
     msg_key: str | None = None,
     data: Any = None,
-    **kwargs
+    **kwargs,
 ) -> dict:
     """
     错误响应
-    
+
     Args:
         code: 错误码
         msg: 直接指定消息（优先级最高）
@@ -164,7 +171,7 @@ def error(
         **kwargs: 消息格式化参数
     """
     from app.core.i18n import t, get_code_message
-    
+
     if msg is None:
         if msg_key:
             msg = t(msg_key, **kwargs)

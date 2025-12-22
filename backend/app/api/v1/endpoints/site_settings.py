@@ -20,6 +20,7 @@ router = APIRouter()
 
 class TestEmailRequest(BaseModel):
     """测试邮件请求"""
+
     email: EmailStr
 
 
@@ -27,17 +28,19 @@ class TestEmailRequest(BaseModel):
 async def get_public_settings():
     """Get public site settings (no authentication required)"""
     settings = await SiteSetting.get_all_by_category(public_only=True)
-    return success(data=PublicSiteSettingsResponse(
-        site_name=settings.get("site_name", "Clouisle"),
-        site_description=settings.get("site_description", ""),
-        site_url=settings.get("site_url", ""),
-        site_icon=settings.get("site_icon", ""),
-        allow_registration=settings.get("allow_registration", True),
-        require_approval=settings.get("require_approval", False),
-        email_verification=settings.get("email_verification", True),
-        enable_captcha=settings.get("enable_captcha", False),
-        allow_account_deletion=settings.get("allow_account_deletion", True),
-    ))
+    return success(
+        data=PublicSiteSettingsResponse(
+            site_name=settings.get("site_name", "Clouisle"),
+            site_description=settings.get("site_description", ""),
+            site_url=settings.get("site_url", ""),
+            site_icon=settings.get("site_icon", ""),
+            allow_registration=settings.get("allow_registration", True),
+            require_approval=settings.get("require_approval", False),
+            email_verification=settings.get("email_verification", True),
+            enable_captcha=settings.get("enable_captcha", False),
+            allow_account_deletion=settings.get("allow_account_deletion", True),
+        )
+    )
 
 
 @router.get("", response_model=Response[SiteSettingsResponse])
@@ -62,14 +65,16 @@ async def get_setting(
             code=ResponseCode.NOT_FOUND,
             msg=f"Setting '{key}' not found",
         )
-    return success(data=SiteSettingResponse(
-        key=setting.key,
-        value=SiteSetting._convert_value(setting.value, setting.value_type),
-        value_type=setting.value_type,
-        category=setting.category,
-        description=setting.description,
-        is_public=setting.is_public,
-    ))
+    return success(
+        data=SiteSettingResponse(
+            key=setting.key,
+            value=SiteSetting._convert_value(setting.value, setting.value_type),
+            value_type=setting.value_type,
+            category=setting.category,
+            description=setting.description,
+            is_public=setting.is_public,
+        )
+    )
 
 
 @router.put("/{key}", response_model=Response[SiteSettingResponse])
@@ -106,15 +111,17 @@ async def update_setting(
             description=setting.description,
             is_public=setting.is_public,
         )
-    
-    return success(data=SiteSettingResponse(
-        key=setting.key,
-        value=SiteSetting._convert_value(setting.value, setting.value_type),
-        value_type=setting.value_type,
-        category=setting.category,
-        description=setting.description,
-        is_public=setting.is_public,
-    ))
+
+    return success(
+        data=SiteSettingResponse(
+            key=setting.key,
+            value=SiteSetting._convert_value(setting.value, setting.value_type),
+            value_type=setting.value_type,
+            category=setting.category,
+            description=setting.description,
+            is_public=setting.is_public,
+        )
+    )
 
 
 @router.put("", response_model=Response[SiteSettingsResponse])
@@ -144,7 +151,7 @@ async def bulk_update_settings(
                 description=config["desc"],
                 is_public=config["public"],
             )
-    
+
     # Return all settings
     settings = await SiteSetting.get_all_by_category()
     return success(data=SiteSettingsResponse(settings=settings))
@@ -167,7 +174,7 @@ async def reset_settings(
             description=config["desc"],
             is_public=config["public"],
         )
-    
+
     settings = await SiteSetting.get_all_by_category(category=category)
     return success(data=SiteSettingsResponse(settings=settings))
 
@@ -185,9 +192,9 @@ async def send_test_email(
             code=ResponseCode.EMAIL_SEND_FAILED,
             msg_key="smtp_not_configured",
         )
-    
+
     site_name = await SiteSetting.get_value("site_name", "Clouisle")
-    
+
     subject = f"【{site_name}】测试邮件 / Test Email"
     body_text = f"""这是一封来自 {site_name} 的测试邮件。
 
@@ -216,13 +223,13 @@ If you received this email, your SMTP configuration is working correctly."""
 </body>
 </html>
 """
-    
+
     result = await send_email(data.email, subject, body_text, body_html)
-    
+
     if not result:
         raise BusinessError(
             code=ResponseCode.EMAIL_SEND_FAILED,
             msg_key="email_send_failed",
         )
-    
+
     return success(msg_key="test_email_sent")

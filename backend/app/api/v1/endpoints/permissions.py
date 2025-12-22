@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends
 from app.api import deps
 from app.models.user import Permission, User
 from app.schemas.user import Permission as PermissionSchema, PermissionCreate
-from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success
+from app.schemas.response import (
+    Response,
+    PageData,
+    ResponseCode,
+    BusinessError,
+    success,
+)
 
 router = APIRouter()
 
@@ -24,17 +30,19 @@ async def read_permissions(
     query = Permission.all()
     if scope:
         query = query.filter(scope=scope)
-    
+
     total = await query.count()
     skip = (page - 1) * page_size
     permissions = await query.offset(skip).limit(page_size)
-    
-    return success(data={
-        "items": permissions,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+
+    return success(
+        data={
+            "items": permissions,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.post("/", response_model=Response[PermissionSchema])
@@ -53,7 +61,7 @@ async def create_permission(
             code=ResponseCode.PERMISSION_CODE_EXISTS,
             msg_key="permission_with_code_exists",
         )
-    
+
     permission = await Permission.create(
         scope=permission_in.scope,
         code=permission_in.code,
@@ -97,7 +105,7 @@ async def update_permission(
             msg_key="permission_not_found",
             status_code=404,
         )
-    
+
     # Check if code is being changed and if it conflicts
     if permission_in.code != permission.code:
         existing = await Permission.filter(code=permission_in.code).first()
@@ -106,12 +114,12 @@ async def update_permission(
                 code=ResponseCode.PERMISSION_CODE_EXISTS,
                 msg_key="permission_with_code_exists",
             )
-    
+
     permission.scope = permission_in.scope
     permission.code = permission_in.code
     permission.description = permission_in.description
     await permission.save()
-    
+
     return success(data=permission, msg_key="permission_updated")
 
 
@@ -130,13 +138,13 @@ async def delete_permission(
             msg_key="permission_not_found",
             status_code=404,
         )
-    
+
     # Prevent deleting the wildcard permission
     if permission.code == "*":
         raise BusinessError(
             code=ResponseCode.CANNOT_DELETE_WILDCARD_PERMISSION,
             msg_key="cannot_delete_wildcard_permission",
         )
-    
+
     await permission.delete()
     return success(data=permission, msg_key="permission_deleted")

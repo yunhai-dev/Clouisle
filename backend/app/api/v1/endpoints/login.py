@@ -8,7 +8,11 @@ from tortoise.exceptions import DoesNotExist
 from app.api import deps
 from app.core import security
 from app.core.config import settings
-from app.core.redis import add_token_to_blacklist, invalidate_user_session, set_user_session
+from app.core.redis import (
+    add_token_to_blacklist,
+    invalidate_user_session,
+    set_user_session,
+)
 from app.core.password import validate_password
 from app.core.login_security import (
     check_account_locked,
@@ -71,14 +75,14 @@ async def login_access_token(
                 code=ResponseCode.CAPTCHA_REQUIRED,
                 msg_key="captcha_required",
             )
-        
+
         is_valid = await verify_captcha(captcha_id, captcha_answer)
         if not is_valid:
             raise BusinessError(
                 code=ResponseCode.CAPTCHA_INVALID,
                 msg_key="captcha_invalid",
             )
-    
+
     try:
         user = await User.get(username=username)
     except DoesNotExist:
@@ -86,7 +90,7 @@ async def login_access_token(
             code=ResponseCode.INVALID_CREDENTIALS,
             msg_key="incorrect_email_or_password",
         )
-    
+
     # Check if account is locked
     is_locked, remaining_seconds = await check_account_locked(user)
     if is_locked:
@@ -99,26 +103,26 @@ async def login_access_token(
     if not security.verify_password(password, user.hashed_password):
         # Record failed attempt
         locked, remaining_attempts, lockout_seconds = await record_failed_login(user)
-        
+
         if locked:
             raise BusinessError(
                 code=ResponseCode.ACCOUNT_LOCKED,
                 msg_key="account_locked_after_attempts",
                 data={"lockout_seconds": lockout_seconds},
             )
-        
+
         raise BusinessError(
             code=ResponseCode.INVALID_CREDENTIALS,
             msg_key="incorrect_email_or_password",
             data={"remaining_attempts": remaining_attempts},
         )
-    
+
     if not user.is_active:
         raise BusinessError(
             code=ResponseCode.INACTIVE_USER,
             msg_key="inactive_user",
         )
-    
+
     # Check email verification if required
     email_verification = await SiteSetting.get_value("email_verification", True)
     if email_verification and not user.email_verified and not user.is_superuser:
@@ -126,34 +130,34 @@ async def login_access_token(
             code=ResponseCode.EMAIL_NOT_VERIFIED,
             msg_key="email_not_verified",
         )
-    
+
     # Reset failed login attempts on successful login
     await reset_login_attempts(user)
-    
+
     # Update last login time
     user.last_login = now_utc()
     await user.save()
-    
+
     # Get session timeout from settings
     session_timeout_days = await SiteSetting.get_value("session_timeout_days", 30)
     access_token_expires = timedelta(days=session_timeout_days)
     expires_in_seconds = int(access_token_expires.total_seconds())
-    
+
     # Check single session mode
     single_session = await SiteSetting.get_value("single_session", False)
     if single_session:
         # Invalidate previous session (kick out old login)
         await invalidate_user_session(str(user.id), expires_in_seconds)
-    
+
     # Create new token
     access_token = security.create_access_token(
         user.id, expires_delta=access_token_expires
     )
-    
+
     # Store session if single session mode is enabled
     if single_session:
         await set_user_session(str(user.id), access_token, expires_in_seconds)
-    
+
     token_data = {
         "access_token": access_token,
         "token_type": "bearer",
@@ -169,7 +173,7 @@ async def logout(
     Logout - invalidate the current token by adding it to blacklist
     """
     from app.core.redis import clear_user_session
-    
+
     try:
         # 解析 token 获取过期时间和用户 ID
         payload = jwt.decode(
@@ -177,22 +181,23 @@ async def logout(
         )
         exp = payload.get("exp", 0)
         user_id = payload.get("sub")
-        
+
         # 计算剩余有效期（秒）
         import time
+
         remaining = max(0, exp - int(time.time()))
-        
+
         # 添加到黑名单，设置过期时间为 token 的剩余有效期
         if remaining > 0:
             await add_token_to_blacklist(token, remaining)
-        
+
         # 清除用户会话记录（如果是单一会话模式）
         if user_id:
             await clear_user_session(user_id)
     except jwt.PyJWTError:
         # token 无效也返回成功（用户体验）
         pass
-    
+
     return success(msg_key="logout_successful")
 
 
@@ -207,11 +212,11 @@ async def register(
     """
     from app.models.user import Role
     from app.core.init_data import SUPER_ADMIN_ROLE
-    
+
     # Check if this is the first user (first user bypasses all restrictions)
     user_count = await User.all().count()
     is_first_user = user_count == 0
-    
+
     # Check if registration is allowed (skip for first user)
     if not is_first_user:
         allow_registration = await SiteSetting.get_value("allow_registration", True)
@@ -220,7 +225,7 @@ async def register(
                 code=ResponseCode.REGISTRATION_DISABLED,
                 msg_key="registration_disabled",
             )
-    
+
     # Validate password strength
     password_valid, password_errors = await validate_password(user_in.password)
     if not password_valid:
@@ -229,7 +234,7 @@ async def register(
             msg_key="password_too_weak",
             data={"errors": {"password": password_errors}},
         )
-    
+
     # Check if username exists
     existing_user = await User.filter(username=user_in.username).first()
     if existing_user:
@@ -237,7 +242,7 @@ async def register(
             code=ResponseCode.USERNAME_EXISTS,
             msg_key="username_already_registered",
         )
-    
+
     # Check if email exists
     existing_email = await User.filter(email=user_in.email).first()
     if existing_email:
@@ -245,11 +250,11 @@ async def register(
             code=ResponseCode.EMAIL_EXISTS,
             msg_key="email_already_registered",
         )
-    
+
     # Get registration settings
     require_approval = await SiteSetting.get_value("require_approval", False)
     email_verification = await SiteSetting.get_value("email_verification", True)
-    
+
     # Create user
     hashed_password = security.get_password_hash(user_in.password)
     user = await User.create(
@@ -262,20 +267,20 @@ async def register(
         is_superuser=is_first_user,
         email_verified=is_first_user,  # First user auto-verified
     )
-    
+
     # If first user, assign Super Admin role
     if is_first_user:
         super_admin_role = await Role.filter(name=SUPER_ADMIN_ROLE).first()
         if super_admin_role:
             await user.roles.add(super_admin_role)
-        
+
         # Reload user with roles
         user = await User.get(id=user.id).prefetch_related("roles__permissions")
         return success(data=user, msg_key="registration_successful_superadmin")
-    
+
     # Reload user with roles (empty but need to be a list)
     user = await User.get(id=user.id).prefetch_related("roles__permissions")
-    
+
     # Determine response message
     if require_approval:
         return success(data=user, msg_key="registration_pending_approval")
@@ -301,7 +306,7 @@ async def send_verification(
             code=ResponseCode.EMAIL_SEND_FAILED,
             msg_key="smtp_not_configured",
         )
-    
+
     # Check cooldown
     can_send, remaining = await check_email_cooldown(data.email, data.purpose)
     if not can_send:
@@ -310,7 +315,7 @@ async def send_verification(
             msg_key="email_send_too_frequent",
             data={"remaining_seconds": remaining},
         )
-    
+
     # Check if email exists (for register purpose, email should belong to a user)
     user = await User.filter(email=data.email).first()
     if data.purpose == "register" and not user:
@@ -318,24 +323,24 @@ async def send_verification(
             code=ResponseCode.NOT_FOUND,
             msg_key="email_not_found",
         )
-    
+
     if data.purpose == "register" and user.email_verified:
         raise BusinessError(
             code=ResponseCode.VALIDATION_ERROR,
             msg_key="email_already_verified",
         )
-    
+
     # Generate code and token
     code, token = await generate_verification_code(data.email, data.purpose)
-    
+
     # Set cooldown
     await set_email_cooldown(data.email, data.purpose, 60)
-    
+
     # Send email in background
     background_tasks.add_task(
         send_verification_email, data.email, code, token, data.purpose
     )
-    
+
     return success(msg_key="verification_email_sent")
 
 
@@ -354,13 +359,13 @@ async def verify_email_by_code(
             code=ResponseCode.VERIFICATION_CODE_INVALID,
             msg_key="verification_code_invalid",
         )
-    
+
     # Update user
     user = await User.filter(email=data.email).first()
     if user and data.purpose == "register":
         user.email_verified = True
         await user.save()
-    
+
     return success(
         data=VerificationResponse(verified=True, email=data.email),
         msg_key="email_verified_success",
@@ -380,15 +385,15 @@ async def verify_email_by_token(
             code=ResponseCode.VERIFICATION_CODE_EXPIRED,
             msg_key="verification_token_invalid",
         )
-    
+
     email, purpose = result
-    
+
     # Update user
     user = await User.filter(email=email).first()
     if user and purpose == "register":
         user.email_verified = True
         await user.save()
-    
+
     return success(
         data=VerificationResponse(verified=True, email=email),
         msg_key="email_verified_success",
@@ -411,7 +416,7 @@ async def resend_verification(
             code=ResponseCode.EMAIL_SEND_FAILED,
             msg_key="smtp_not_configured",
         )
-    
+
     # Check cooldown
     can_send, remaining = await check_email_cooldown(data.email, "register")
     if not can_send:
@@ -420,30 +425,30 @@ async def resend_verification(
             msg_key="email_send_too_frequent",
             data={"remaining_seconds": remaining},
         )
-    
+
     # Find user
     user = await User.filter(email=data.email).first()
     if not user:
         # Don't reveal if email exists
         return success(msg_key="verification_email_sent")
-    
+
     if user.email_verified:
         raise BusinessError(
             code=ResponseCode.VALIDATION_ERROR,
             msg_key="email_already_verified",
         )
-    
+
     # Generate code and token
     code, token = await generate_verification_code(data.email, "register")
-    
+
     # Set cooldown
     await set_email_cooldown(data.email, "register", 60)
-    
+
     # Send email in background
     background_tasks.add_task(
         send_verification_email, data.email, code, token, "register"
     )
-    
+
     return success(msg_key="verification_email_sent")
 
 
@@ -463,7 +468,7 @@ async def forgot_password(
             code=ResponseCode.EMAIL_SEND_FAILED,
             msg_key="smtp_not_configured",
         )
-    
+
     # Check cooldown
     can_send, remaining = await check_email_cooldown(data.email, "reset_password")
     if not can_send:
@@ -472,21 +477,21 @@ async def forgot_password(
             msg_key="email_send_too_frequent",
             data={"remaining_seconds": remaining},
         )
-    
+
     # Find user (don't reveal if email exists for security)
     user = await User.filter(email=data.email).first()
     if user:
         # Generate code and token
         code, token = await generate_verification_code(data.email, "reset_password")
-        
+
         # Set cooldown
         await set_email_cooldown(data.email, "reset_password", 60)
-        
+
         # Send email in background
         background_tasks.add_task(
             send_verification_email, data.email, code, token, "reset_password"
         )
-    
+
     # Always return success to prevent email enumeration
     return success(msg_key="reset_password_email_sent")
 
@@ -506,7 +511,7 @@ async def reset_password(
             code=ResponseCode.VERIFICATION_CODE_INVALID,
             msg_key="verification_code_invalid",
         )
-    
+
     # Validate new password
     password_valid, password_errors = await validate_password(data.new_password)
     if not password_valid:
@@ -515,7 +520,7 @@ async def reset_password(
             msg_key="password_too_weak",
             data={"errors": {"password": password_errors}},
         )
-    
+
     # Find and update user
     user = await User.filter(email=data.email).first()
     if not user:
@@ -523,12 +528,12 @@ async def reset_password(
             code=ResponseCode.NOT_FOUND,
             msg_key="user_not_found",
         )
-    
+
     # Update password
     user.hashed_password = security.get_password_hash(data.new_password)
     # Reset login attempts
     user.failed_login_attempts = 0
     user.locked_until = None
     await user.save()
-    
+
     return success(msg_key="password_reset_success")

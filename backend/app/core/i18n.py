@@ -2,6 +2,7 @@
 Internationalization (i18n) module for multi-language support.
 Currently supports: English (en), Chinese (zh)
 """
+
 from contextvars import ContextVar
 from enum import Enum
 from typing import Optional
@@ -12,6 +13,7 @@ current_language: ContextVar[str] = ContextVar("current_language", default="en")
 
 class Language(str, Enum):
     """Supported languages"""
+
     EN = "en"
     ZH = "zh"
 
@@ -140,7 +142,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Permission deleted successfully",
         "zh": "权限删除成功",
     },
-    
     # Error messages - General
     "unknown_error": {
         "en": "Unknown error",
@@ -150,7 +151,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Validation error",
         "zh": "验证错误",
     },
-    
     # Error messages - Authentication
     "unauthorized": {
         "en": "Unauthorized",
@@ -184,7 +184,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Could not validate credentials",
         "zh": "无法验证凭证",
     },
-    
     # Account security messages
     "account_locked": {
         "en": "Account is locked. Please try again later.",
@@ -202,7 +201,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Password does not meet security requirements",
         "zh": "密码不符合安全要求",
     },
-    
     # Email verification messages
     "smtp_not_configured": {
         "en": "Email service is not configured",
@@ -264,7 +262,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Insufficient email quota for this batch. Reduce the number of recipients.",
         "zh": "邮件配额不足，请减少收件人数量",
     },
-    
     # File upload messages
     "file_uploaded": {
         "en": "File uploaded successfully",
@@ -286,7 +283,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "File too large",
         "zh": "文件过大",
     },
-    
     # Captcha messages
     "captcha_required": {
         "en": "Captcha is required",
@@ -296,7 +292,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Invalid captcha answer",
         "zh": "验证码错误",
     },
-    
     # Error messages - Permission
     "permission_denied": {
         "en": "Permission denied",
@@ -310,7 +305,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Operation not permitted. Required: {permission}",
         "zh": "操作不允许。需要权限：{permission}",
     },
-    
     # Error messages - Resource
     "not_found": {
         "en": "Resource not found",
@@ -332,7 +326,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Permission '{code}' not found",
         "zh": "权限 '{code}' 未找到",
     },
-    
     # Error messages - Business logic
     "already_exists": {
         "en": "Resource already exists",
@@ -406,7 +399,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Cannot delete role: {count} user(s) are assigned to this role",
         "zh": "无法删除角色：有 {count} 个用户分配了此角色",
     },
-    
     # Team messages
     "team_created": {
         "en": "Team created successfully",
@@ -444,7 +436,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Cannot delete the default team",
         "zh": "不能删除默认团队",
     },
-    
     # Team member messages
     "team_member_added": {
         "en": "Team member added successfully",
@@ -514,34 +505,34 @@ def set_language(lang: str) -> None:
 def t(key: str, lang: Optional[str] = None, **kwargs) -> str:
     """
     Translate a message key to the current language.
-    
+
     Args:
         key: Message key to translate
         lang: Optional language override (defaults to current context language)
         **kwargs: Format arguments for the message
-        
+
     Returns:
         Translated message string
     """
     if lang is None:
         lang = get_language()
-    
+
     # Normalize language code
     lang = lang.lower().split("-")[0]
     if lang not in [lang_enum.value for lang_enum in Language]:
         lang = Language.EN.value
-    
+
     # Get translation
     translations = TRANSLATIONS.get(key, {})
     message = translations.get(lang) or translations.get(Language.EN.value, key)
-    
+
     # Apply format arguments
     if kwargs:
         try:
             message = message.format(**kwargs)
         except (KeyError, ValueError):
             pass
-    
+
     return message
 
 
@@ -551,7 +542,7 @@ def get_code_message(code: int, lang: Optional[str] = None) -> str:
     Maps ResponseCode values to translation keys.
     """
     from app.schemas.response import ResponseCode
-    
+
     # Map ResponseCode to translation key
     code_to_key = {
         ResponseCode.SUCCESS: "success",
@@ -589,11 +580,11 @@ def get_code_message(code: int, lang: Optional[str] = None) -> str:
         ResponseCode.CAPTCHA_REQUIRED: "captcha_required",
         ResponseCode.CAPTCHA_INVALID: "captcha_invalid",
     }
-    
+
     try:
         response_code = ResponseCode(code)
         key = code_to_key.get(response_code, "unknown_error")
     except ValueError:
         key = "unknown_error"
-    
+
     return t(key, lang)

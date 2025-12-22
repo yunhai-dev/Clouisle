@@ -7,7 +7,13 @@ from pydantic import BaseModel
 from app.api import deps
 from app.models.user import Role, Permission, User
 from app.schemas.user import Role as RoleSchema, RoleCreate
-from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success
+from app.schemas.response import (
+    Response,
+    PageData,
+    ResponseCode,
+    BusinessError,
+    success,
+)
 
 router = APIRouter()
 
@@ -32,14 +38,18 @@ async def read_roles(
     """
     total = await Role.all().count()
     skip = (page - 1) * page_size
-    roles = await Role.all().offset(skip).limit(page_size).prefetch_related("permissions")
-    
-    return success(data={
-        "items": roles,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
+    roles = (
+        await Role.all().offset(skip).limit(page_size).prefetch_related("permissions")
+    )
+
+    return success(
+        data={
+            "items": roles,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
 
 
 @router.post("/", response_model=Response[RoleSchema])
@@ -58,20 +68,20 @@ async def create_role(
             code=ResponseCode.ROLE_NAME_EXISTS,
             msg_key="role_with_name_exists",
         )
-    
+
     role = await Role.create(
         name=role_in.name,
         description=role_in.description,
         is_system_role=False,
     )
-    
+
     # Add permissions
     if role_in.permissions:
         for perm_code in role_in.permissions:
             perm = await Permission.filter(code=perm_code).first()
             if perm:
                 await role.permissions.add(perm)
-    
+
     # Reload with permissions
     role = await Role.get(id=role.id).prefetch_related("permissions")
     return success(data=role, msg_key="role_created")
@@ -112,13 +122,13 @@ async def update_role(
             msg_key="role_not_found",
             status_code=404,
         )
-    
+
     if role.is_system_role:
         raise BusinessError(
             code=ResponseCode.CANNOT_MODIFY_SYSTEM_ROLE,
             msg_key="cannot_modify_system_role",
         )
-    
+
     # Check if name is being changed and if it conflicts
     if role_in.name and role_in.name != role.name:
         existing = await Role.filter(name=role_in.name).first()
@@ -128,12 +138,12 @@ async def update_role(
                 msg_key="role_with_name_exists",
             )
         role.name = role_in.name
-    
+
     if role_in.description is not None:
         role.description = role_in.description
-    
+
     await role.save()
-    
+
     role = await Role.get(id=role_id).prefetch_related("permissions")
     return success(data=role, msg_key="role_updated")
 
@@ -155,16 +165,16 @@ async def update_role_permissions(
             msg_key="role_not_found",
             status_code=404,
         )
-    
+
     if role.is_system_role:
         raise BusinessError(
             code=ResponseCode.CANNOT_MODIFY_SYSTEM_ROLE,
             msg_key="cannot_modify_system_role_permissions",
         )
-    
+
     # Clear existing permissions
     await role.permissions.clear()
-    
+
     # Add new permissions
     for perm_code in permissions_in.permissions:
         perm = await Permission.filter(code=perm_code).first()
@@ -175,7 +185,7 @@ async def update_role_permissions(
                 perm_code=perm_code,
             )
         await role.permissions.add(perm)
-    
+
     role = await Role.get(id=role_id).prefetch_related("permissions")
     return success(data=role, msg_key="role_permissions_updated")
 
@@ -195,13 +205,13 @@ async def delete_role(
             msg_key="role_not_found",
             status_code=404,
         )
-    
+
     if role.is_system_role:
         raise BusinessError(
             code=ResponseCode.CANNOT_DELETE_SYSTEM_ROLE,
             msg_key="cannot_delete_system_role",
         )
-    
+
     # Check if role is assigned to any users
     users_with_role = await User.filter(roles=role).count()
     if users_with_role > 0:
@@ -210,6 +220,6 @@ async def delete_role(
             msg_key="role_in_use",
             count=users_with_role,
         )
-    
+
     await role.delete()
     return success(data=role, msg_key="role_deleted")
