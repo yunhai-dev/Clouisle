@@ -76,6 +76,78 @@ When modifying project documentation (especially `README.md`), you **must** sync
 
 ---
 
+## ⚙️ Backend Development Guidelines
+
+**Migration & Cold Start Data**:
+Database migrations and initial data seeding (cold start) must be implemented to execute automatically upon backend startup. The application should check for the existence of necessary schemas and data; if missing, it must automatically apply migrations and populate the initial dataset.
+
+**Unified API Response Format**:
+All API endpoints **must** return responses in the following unified format:
+
+```json
+{
+  "code": 0,        // 0 = success, non-zero = error code
+  "data": {...},    // Response payload (can be null)
+  "msg": "success"  // Human-readable message
+}
+```
+
+For **paginated** responses, the `data` field should follow this structure:
+
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [...],     // List of items
+    "total": 100,       // Total count
+    "page": 1,          // Current page number
+    "page_size": 20     // Items per page
+  },
+  "msg": "success"
+}
+```
+
+Use the helper functions from `app/schemas/response.py`:
+- `success(data=..., msg="...")` for successful responses
+- `error(code=..., msg="...", data=...)` for error responses
+- `Response[T]` generic type for type hints
+- `PageData[T]` for paginated data structures
+
+**Response Code Standards**:
+Use `ResponseCode` enum from `app/schemas/response.py` for all error codes:
+
+| 范围 | 类别 | 枚举值示例 |
+|------|------|-----------|
+| 0 | 成功 | `SUCCESS` |
+| 1000-1999 | 通用错误 | `UNKNOWN_ERROR`, `VALIDATION_ERROR` |
+| 2000-2999 | 认证错误 | `UNAUTHORIZED`, `INVALID_TOKEN`, `TOKEN_EXPIRED`, `INVALID_CREDENTIALS`, `INACTIVE_USER` |
+| 3000-3999 | 权限错误 | `PERMISSION_DENIED`, `INSUFFICIENT_PRIVILEGES` |
+| 4000-4999 | 资源错误 | `NOT_FOUND`, `USER_NOT_FOUND`, `ROLE_NOT_FOUND`, `PERMISSION_NOT_FOUND` |
+| 5000-5999 | 业务逻辑错误 | `USERNAME_EXISTS`, `EMAIL_EXISTS`, `CANNOT_DELETE_SYSTEM_ROLE`, `ROLE_IN_USE` |
+
+**Usage Example**:
+```python
+from app.schemas.response import ResponseCode, success, error
+
+# 成功响应
+return success(data=user, msg="User created")
+
+# 错误响应（自动获取默认消息）
+return error(code=ResponseCode.USERNAME_EXISTS)
+
+# 错误响应（自定义消息）
+return error(code=ResponseCode.NOT_FOUND, msg="User not found")
+```
+
+**Adding New Codes**: When adding new error scenarios, add the code to `ResponseCode` enum and its default message to `CODE_MESSAGES` dict.
+
+## 📚 Design Documents
+
+- [RBAC Permission System Design](docs/design/RBAC_SPEC.md)
+- [Backend API Documentation](docs/api/BACKEND_API.md)
+
+---
+
 ## 📝 Recent Actions Log
 
 1.  **Project Initialization**:
