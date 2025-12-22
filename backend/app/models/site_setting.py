@@ -111,6 +111,7 @@ class SiteSetting(models.Model):
         else:
             return value
 
+
 class SettingConfig(TypedDict):
     value: Any
     type: str
