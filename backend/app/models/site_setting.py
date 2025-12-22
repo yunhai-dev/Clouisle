@@ -1,0 +1,319 @@
+from typing import Any, Optional, TypedDict
+
+from tortoise import fields, models
+
+
+class SiteSetting(models.Model):
+    """站点设置模型 - 键值对存储"""
+
+    id = fields.UUIDField(pk=True)
+    key = fields.CharField(max_length=100, unique=True, description="Setting key")
+    value = fields.TextField(
+        null=True, description="Setting value (JSON string for complex types)"
+    )
+    value_type = fields.CharField(
+        max_length=20, default="string", description="string, int, bool, json"
+    )
+    category = fields.CharField(
+        max_length=50, default="general", description="Setting category"
+    )
+    description = fields.CharField(max_length=255, null=True)
+    is_public = fields.BooleanField(
+        default=False, description="If True, visible to unauthenticated users"
+    )
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "site_settings"
+
+    def __str__(self):
+        return f"{self.key}={self.value}"
+
+    @classmethod
+    async def get_value(cls, key: str, default=None):
+        """Get setting value with type conversion"""
+        setting = await cls.filter(key=key).first()
+        if not setting:
+            return default
+        return cls._convert_value(setting.value, setting.value_type)
+
+    @classmethod
+    async def set_value(
+        cls,
+        key: str,
+        value: Any,
+        value_type: str = "string",
+        category: Optional[str] = "general",
+        description: Optional[str] = None,
+        is_public: bool = False,
+    ):
+        """Set setting value"""
+        import json
+
+        # Convert value to string for storage
+        str_value: Optional[str]
+        if value_type == "bool":
+            str_value = "true" if value else "false"
+        elif value_type == "json":
+            str_value = json.dumps(value) if value is not None else None
+        else:
+            str_value = str(value) if value is not None else None
+
+        setting, created = await cls.get_or_create(
+            key=key,
+            defaults={
+                "value": str_value,
+                "value_type": value_type,
+                "category": category,
+                "description": description,
+                "is_public": is_public,
+            },
+        )
+        if not created:
+            setting.value = str_value  # type: ignore[assignment]
+            setting.value_type = str(value_type)
+            if category is not None:
+                setting.category = category  # type: ignore[assignment]
+            if description is not None:
+                setting.description = description
+            setting.is_public = is_public
+            await setting.save()
+        return setting
+
+    @classmethod
+    async def get_all_by_category(
+        cls, category: Optional[str] = None, public_only: bool = False
+    ) -> dict[str, Any]:
+        """Get all settings, optionally filtered by category"""
+        query = cls.all()
+        if category:
+            query = query.filter(category=category)
+        if public_only:
+            query = query.filter(is_public=True)
+
+        settings = await query
+        return {s.key: cls._convert_value(s.value, s.value_type) for s in settings}
+
+    @staticmethod
+    def _convert_value(value: Optional[str], value_type: str) -> Any:
+        """Convert string value to appropriate type"""
+        import json
+
+        if value is None:
+            return None
+
+        if value_type == "int":
+            return int(value)
+        elif value_type == "bool":
+            return value.lower() in ("true", "1", "yes")
+        elif value_type == "json":
+            return json.loads(value)
+        else:
+            return value
+
+
+class SettingConfig(TypedDict):
+    value: Any
+    type: str
+    category: str
+    public: bool
+    desc: str
+
+
+# Default settings definitions
+DEFAULT_SETTINGS: dict[str, SettingConfig] = {
+    # General
+    "site_name": {
+        "value": "Clouisle",
+        "type": "string",
+        "category": "general",
+        "public": True,
+        "desc": "Site name",
+    },
+    "site_description": {
+        "value": "",
+        "type": "string",
+        "category": "general",
+        "public": True,
+        "desc": "Site description",
+    },
+    "site_url": {
+        "value": "",
+        "type": "string",
+        "category": "general",
+        "public": True,
+        "desc": "Site URL",
+    },
+    "site_icon": {
+        "value": "",
+        "type": "string",
+        "category": "general",
+        "public": True,
+        "desc": "Site icon URL",
+    },
+    # Registration
+    "allow_registration": {
+        "value": True,
+        "type": "bool",
+        "category": "general",
+        "public": True,
+        "desc": "Allow user registration",
+    },
+    "require_approval": {
+        "value": True,
+        "type": "bool",
+        "category": "general",
+        "public": True,
+        "desc": "Require admin approval for new users",
+    },
+    "email_verification": {
+        "value": True,
+        "type": "bool",
+        "category": "general",
+        "public": True,
+        "desc": "Require email verification",
+    },
+    "allow_account_deletion": {
+        "value": True,
+        "type": "bool",
+        "category": "general",
+        "public": True,
+        "desc": "Allow users to delete their own account",
+    },
+    # Security
+    "min_password_length": {
+        "value": 8,
+        "type": "int",
+        "category": "security",
+        "public": False,
+        "desc": "Minimum password length",
+    },
+    "require_uppercase": {
+        "value": True,
+        "type": "bool",
+        "category": "security",
+        "public": False,
+        "desc": "Require uppercase in password",
+    },
+    "require_number": {
+        "value": True,
+        "type": "bool",
+        "category": "security",
+        "public": False,
+        "desc": "Require number in password",
+    },
+    "require_special_char": {
+        "value": False,
+        "type": "bool",
+        "category": "security",
+        "public": False,
+        "desc": "Require special character in password",
+    },
+    "session_timeout_days": {
+        "value": 30,
+        "type": "int",
+        "category": "security",
+        "public": False,
+        "desc": "Session timeout in days",
+    },
+    "single_session": {
+        "value": False,
+        "type": "bool",
+        "category": "security",
+        "public": False,
+        "desc": "Allow only single session per user",
+    },
+    "max_login_attempts": {
+        "value": 5,
+        "type": "int",
+        "category": "security",
+        "public": False,
+        "desc": "Max login attempts before lockout",
+    },
+    "lockout_duration_minutes": {
+        "value": 15,
+        "type": "int",
+        "category": "security",
+        "public": False,
+        "desc": "Account lockout duration in minutes",
+    },
+    "enable_captcha": {
+        "value": False,
+        "type": "bool",
+        "category": "security",
+        "public": True,
+        "desc": "Enable captcha on login",
+    },
+    # Email
+    "smtp_enabled": {
+        "value": False,
+        "type": "bool",
+        "category": "email",
+        "public": False,
+        "desc": "Enable SMTP",
+    },
+    "smtp_host": {
+        "value": "",
+        "type": "string",
+        "category": "email",
+        "public": False,
+        "desc": "SMTP host",
+    },
+    "smtp_port": {
+        "value": 587,
+        "type": "int",
+        "category": "email",
+        "public": False,
+        "desc": "SMTP port",
+    },
+    "smtp_encryption": {
+        "value": "tls",
+        "type": "string",
+        "category": "email",
+        "public": False,
+        "desc": "SMTP encryption (none, ssl, tls)",
+    },
+    "smtp_username": {
+        "value": "",
+        "type": "string",
+        "category": "email",
+        "public": False,
+        "desc": "SMTP username",
+    },
+    "smtp_password": {
+        "value": "",
+        "type": "string",
+        "category": "email",
+        "public": False,
+        "desc": "SMTP password",
+    },
+    "email_from_name": {
+        "value": "Clouisle",
+        "type": "string",
+        "category": "email",
+        "public": False,
+        "desc": "Email sender name",
+    },
+    "email_from_address": {
+        "value": "",
+        "type": "string",
+        "category": "email",
+        "public": False,
+        "desc": "Email sender address",
+    },
+}
+
+
+async def init_default_settings():
+    """Initialize default settings if not exist"""
+    for key, config in DEFAULT_SETTINGS.items():
+        existing = await SiteSetting.filter(key=key).first()
+        if not existing:
+            await SiteSetting.set_value(
+                key=key,
+                value=config["value"],
+                value_type=config["type"],
+                category=config["category"],
+                description=config["desc"],
+                is_public=config["public"],
+            )

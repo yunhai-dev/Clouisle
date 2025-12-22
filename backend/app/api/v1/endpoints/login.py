@@ -1,0 +1,540 @@
+from datetime import timedelta
+from typing import Any, Optional
+
+import jwt
+from fastapi import APIRouter, Depends, Request, BackgroundTasks, Form
+from tortoise.exceptions import DoesNotExist
+
+from app.api import deps
+from app.core import security
+from app.core.config import settings
+from app.core.redis import (
+    add_token_to_blacklist,
+    invalidate_user_session,
+    set_user_session,
+)
+from app.core.password import validate_password
+from app.core.login_security import (
+    check_account_locked,
+    record_failed_login,
+    reset_login_attempts,
+)
+from app.core.email import (
+    generate_verification_code,
+    verify_code,
+    verify_token,
+    check_email_cooldown,
+    set_email_cooldown,
+    send_verification_email,
+)
+from app.core.captcha import generate_captcha, verify_captcha
+from app.core.timezone import now_utc
+from app.models.user import User
+from app.models.site_setting import SiteSetting
+from app.schemas.token import Token
+from app.schemas.user import UserCreate, User as UserSchema
+from app.schemas.captcha import CaptchaResponse
+from app.schemas.verification import (
+    SendVerificationRequest,
+    VerifyCodeRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    ResetPasswordConfirmRequest,
+    VerificationResponse,
+)
+from app.schemas.response import Response, ResponseCode, BusinessError, success
+
+router = APIRouter()
+
+
+@router.get("/captcha", response_model=Response[CaptchaResponse])
+async def get_captcha() -> Any:
+    """
+    Get a new captcha for login
+    """
+    captcha_id, question, _ = await generate_captcha()
+    return success(data=CaptchaResponse(captcha_id=captcha_id, question=question))
+
+
+@router.post("/login/access-token", response_model=Response[Token])
+async def login_access_token(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    captcha_id: Optional[str] = Form(None),
+    captcha_answer: Optional[str] = Form(None),
+) -> Any:
+    """
+    OAuth2 compatible token login, get an access token for future requests
+    """
+    # Check if captcha is enabled and verify it
+    enable_captcha = await SiteSetting.get_value("enable_captcha", False)
+    if enable_captcha:
+        if not captcha_id or not captcha_answer:
+            raise BusinessError(
+                code=ResponseCode.CAPTCHA_REQUIRED,
+                msg_key="captcha_required",
+            )
+
+        is_valid = await verify_captcha(captcha_id, captcha_answer)
+        if not is_valid:
+            raise BusinessError(
+                code=ResponseCode.CAPTCHA_INVALID,
+                msg_key="captcha_invalid",
+            )
+
+    try:
+        user = await User.get(username=username)
+    except DoesNotExist:
+        raise BusinessError(
+            code=ResponseCode.INVALID_CREDENTIALS,
+            msg_key="incorrect_email_or_password",
+        )
+
+    # Check if account is locked
+    is_locked, remaining_seconds = await check_account_locked(user)
+    if is_locked:
+        raise BusinessError(
+            code=ResponseCode.ACCOUNT_LOCKED,
+            msg_key="account_locked",
+            data={"remaining_seconds": remaining_seconds},
+        )
+
+    if not security.verify_password(password, user.hashed_password):
+        # Record failed attempt
+        locked, remaining_attempts, lockout_seconds = await record_failed_login(user)
+
+        if locked:
+            raise BusinessError(
+                code=ResponseCode.ACCOUNT_LOCKED,
+                msg_key="account_locked_after_attempts",
+                data={"lockout_seconds": lockout_seconds},
+            )
+
+        raise BusinessError(
+            code=ResponseCode.INVALID_CREDENTIALS,
+            msg_key="incorrect_email_or_password",
+            data={"remaining_attempts": remaining_attempts},
+        )
+
+    if not user.is_active:
+        raise BusinessError(
+            code=ResponseCode.INACTIVE_USER,
+            msg_key="inactive_user",
+        )
+
+    # Check email verification if required
+    email_verification = await SiteSetting.get_value("email_verification", True)
+    if email_verification and not user.email_verified and not user.is_superuser:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_NOT_VERIFIED,
+            msg_key="email_not_verified",
+        )
+
+    # Reset failed login attempts on successful login
+    await reset_login_attempts(user)
+
+    # Update last login time
+    user.last_login = now_utc()
+    await user.save()
+
+    # Get session timeout from settings
+    session_timeout_days = await SiteSetting.get_value("session_timeout_days", 30)
+    access_token_expires = timedelta(days=session_timeout_days)
+    expires_in_seconds = int(access_token_expires.total_seconds())
+
+    # Check single session mode
+    single_session = await SiteSetting.get_value("single_session", False)
+    if single_session:
+        # Invalidate previous session (kick out old login)
+        await invalidate_user_session(str(user.id), expires_in_seconds)
+
+    # Create new token
+    access_token = security.create_access_token(
+        user.id, expires_delta=access_token_expires
+    )
+
+    # Store session if single session mode is enabled
+    if single_session:
+        await set_user_session(str(user.id), access_token, expires_in_seconds)
+
+    token_data = {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+    return success(data=token_data, msg_key="login_successful")
+
+
+@router.post("/logout", response_model=Response[None])
+async def logout(
+    token: str = Depends(deps.reusable_oauth2),
+) -> Any:
+    """
+    Logout - invalidate the current token by adding it to blacklist
+    """
+    from app.core.redis import clear_user_session
+
+    try:
+        # 解析 token 获取过期时间和用户 ID
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        exp = payload.get("exp", 0)
+        user_id = payload.get("sub")
+
+        # 计算剩余有效期（秒）
+        import time
+
+        remaining = max(0, exp - int(time.time()))
+
+        # 添加到黑名单，设置过期时间为 token 的剩余有效期
+        if remaining > 0:
+            await add_token_to_blacklist(token, remaining)
+
+        # 清除用户会话记录（如果是单一会话模式）
+        if user_id:
+            await clear_user_session(user_id)
+    except jwt.PyJWTError:
+        # token 无效也返回成功（用户体验）
+        pass
+
+    return success(msg_key="logout_successful")
+
+
+@router.post("/register", response_model=Response[UserSchema])
+async def register(
+    *,
+    user_in: UserCreate,
+) -> Any:
+    """
+    Register a new user (open registration).
+    The first registered user will be automatically promoted to Super Admin.
+    """
+    from app.models.user import Role
+    from app.core.init_data import SUPER_ADMIN_ROLE
+
+    # Check if this is the first user (first user bypasses all restrictions)
+    user_count = await User.all().count()
+    is_first_user = user_count == 0
+
+    # Check if registration is allowed (skip for first user)
+    if not is_first_user:
+        allow_registration = await SiteSetting.get_value("allow_registration", True)
+        if not allow_registration:
+            raise BusinessError(
+                code=ResponseCode.REGISTRATION_DISABLED,
+                msg_key="registration_disabled",
+            )
+
+    # Validate password strength
+    password_valid, password_errors = await validate_password(user_in.password)
+    if not password_valid:
+        raise BusinessError(
+            code=ResponseCode.VALIDATION_ERROR,
+            msg_key="password_too_weak",
+            data={"errors": {"password": password_errors}},
+        )
+
+    # Check if username exists
+    existing_user = await User.filter(username=user_in.username).first()
+    if existing_user:
+        raise BusinessError(
+            code=ResponseCode.USERNAME_EXISTS,
+            msg_key="username_already_registered",
+        )
+
+    # Check if email exists
+    existing_email = await User.filter(email=user_in.email).first()
+    if existing_email:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_EXISTS,
+            msg_key="email_already_registered",
+        )
+
+    # Get registration settings
+    require_approval = await SiteSetting.get_value("require_approval", False)
+    email_verification = await SiteSetting.get_value("email_verification", True)
+
+    # Create user
+    hashed_password = security.get_password_hash(user_in.password)
+    user = await User.create(
+        username=user_in.username,
+        email=user_in.email,
+        hashed_password=hashed_password,
+        # First user is active and superuser
+        # Others depend on require_approval setting
+        is_active=is_first_user or not require_approval,
+        is_superuser=is_first_user,
+        email_verified=is_first_user,  # First user auto-verified
+    )
+
+    # If first user, assign Super Admin role
+    if is_first_user:
+        super_admin_role = await Role.filter(name=SUPER_ADMIN_ROLE).first()
+        if super_admin_role:
+            await user.roles.add(super_admin_role)
+
+        # Reload user with roles
+        user = await User.get(id=user.id).prefetch_related("roles__permissions")
+        return success(data=user, msg_key="registration_successful_superadmin")
+
+    # Reload user with roles (empty but need to be a list)
+    user = await User.get(id=user.id).prefetch_related("roles__permissions")
+
+    # Determine response message
+    if require_approval:
+        return success(data=user, msg_key="registration_pending_approval")
+    elif email_verification:
+        return success(data=user, msg_key="registration_pending_verification")
+    else:
+        return success(data=user, msg_key="registration_successful")
+
+
+@router.post("/send-verification", response_model=Response[None])
+async def send_verification(
+    *,
+    data: SendVerificationRequest,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """
+    Send verification email
+    """
+    # Check SMTP is enabled
+    smtp_enabled = await SiteSetting.get_value("smtp_enabled", False)
+    if not smtp_enabled:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_FAILED,
+            msg_key="smtp_not_configured",
+        )
+
+    # Check cooldown
+    can_send, remaining = await check_email_cooldown(data.email, data.purpose)
+    if not can_send:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_TOO_FREQUENT,
+            msg_key="email_send_too_frequent",
+            data={"remaining_seconds": remaining},
+        )
+
+    # Check if email exists (for register purpose, email should belong to a user)
+    user = await User.filter(email=data.email).first()
+    if data.purpose == "register":
+        if not user:
+            raise BusinessError(
+                code=ResponseCode.NOT_FOUND,
+                msg_key="email_not_found",
+            )
+
+        if user.email_verified:
+            raise BusinessError(
+                code=ResponseCode.VALIDATION_ERROR,
+                msg_key="email_already_verified",
+            )
+
+    # Generate code and token
+    code, token = await generate_verification_code(data.email, data.purpose)
+
+    # Set cooldown
+    await set_email_cooldown(data.email, data.purpose, 60)
+
+    # Send email in background
+    background_tasks.add_task(
+        send_verification_email, data.email, code, token, data.purpose
+    )
+
+    return success(msg_key="verification_email_sent")
+
+
+@router.post("/verify-email", response_model=Response[VerificationResponse])
+async def verify_email_by_code(
+    *,
+    data: VerifyCodeRequest,
+) -> Any:
+    """
+    Verify email by code
+    """
+    # Verify code
+    is_valid = await verify_code(data.email, data.code, data.purpose)
+    if not is_valid:
+        raise BusinessError(
+            code=ResponseCode.VERIFICATION_CODE_INVALID,
+            msg_key="verification_code_invalid",
+        )
+
+    # Update user
+    user = await User.filter(email=data.email).first()
+    if user and data.purpose == "register":
+        user.email_verified = True
+        await user.save()
+
+    return success(
+        data=VerificationResponse(verified=True, email=data.email),
+        msg_key="email_verified_success",
+    )
+
+
+@router.get("/verify", response_model=Response[VerificationResponse])
+async def verify_email_by_token(
+    token: str,
+) -> Any:
+    """
+    Verify email by token (from email link)
+    """
+    result = await verify_token(token)
+    if not result:
+        raise BusinessError(
+            code=ResponseCode.VERIFICATION_CODE_EXPIRED,
+            msg_key="verification_token_invalid",
+        )
+
+    email, purpose = result
+
+    # Update user
+    user = await User.filter(email=email).first()
+    if user and purpose == "register":
+        user.email_verified = True
+        await user.save()
+
+    return success(
+        data=VerificationResponse(verified=True, email=email),
+        msg_key="email_verified_success",
+    )
+
+
+@router.post("/resend-verification", response_model=Response[None])
+async def resend_verification(
+    *,
+    data: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """
+    Resend verification email for registration
+    """
+    # Check SMTP is enabled
+    smtp_enabled = await SiteSetting.get_value("smtp_enabled", False)
+    if not smtp_enabled:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_FAILED,
+            msg_key="smtp_not_configured",
+        )
+
+    # Check cooldown
+    can_send, remaining = await check_email_cooldown(data.email, "register")
+    if not can_send:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_TOO_FREQUENT,
+            msg_key="email_send_too_frequent",
+            data={"remaining_seconds": remaining},
+        )
+
+    # Find user
+    user = await User.filter(email=data.email).first()
+    if not user:
+        # Don't reveal if email exists
+        return success(msg_key="verification_email_sent")
+
+    if user.email_verified:
+        raise BusinessError(
+            code=ResponseCode.VALIDATION_ERROR,
+            msg_key="email_already_verified",
+        )
+
+    # Generate code and token
+    code, token = await generate_verification_code(data.email, "register")
+
+    # Set cooldown
+    await set_email_cooldown(data.email, "register", 60)
+
+    # Send email in background
+    background_tasks.add_task(
+        send_verification_email, data.email, code, token, "register"
+    )
+
+    return success(msg_key="verification_email_sent")
+
+
+@router.post("/forgot-password", response_model=Response[None])
+async def forgot_password(
+    *,
+    data: ResetPasswordRequest,
+    background_tasks: BackgroundTasks,
+) -> Any:
+    """
+    Send password reset email
+    """
+    # Check SMTP is enabled
+    smtp_enabled = await SiteSetting.get_value("smtp_enabled", False)
+    if not smtp_enabled:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_FAILED,
+            msg_key="smtp_not_configured",
+        )
+
+    # Check cooldown
+    can_send, remaining = await check_email_cooldown(data.email, "reset_password")
+    if not can_send:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_TOO_FREQUENT,
+            msg_key="email_send_too_frequent",
+            data={"remaining_seconds": remaining},
+        )
+
+    # Find user (don't reveal if email exists for security)
+    user = await User.filter(email=data.email).first()
+    if user:
+        # Generate code and token
+        code, token = await generate_verification_code(data.email, "reset_password")
+
+        # Set cooldown
+        await set_email_cooldown(data.email, "reset_password", 60)
+
+        # Send email in background
+        background_tasks.add_task(
+            send_verification_email, data.email, code, token, "reset_password"
+        )
+
+    # Always return success to prevent email enumeration
+    return success(msg_key="reset_password_email_sent")
+
+
+@router.post("/reset-password", response_model=Response[None])
+async def reset_password(
+    *,
+    data: ResetPasswordConfirmRequest,
+) -> Any:
+    """
+    Reset password with verification code
+    """
+    # Verify code
+    is_valid = await verify_code(data.email, data.code, "reset_password")
+    if not is_valid:
+        raise BusinessError(
+            code=ResponseCode.VERIFICATION_CODE_INVALID,
+            msg_key="verification_code_invalid",
+        )
+
+    # Validate new password
+    password_valid, password_errors = await validate_password(data.new_password)
+    if not password_valid:
+        raise BusinessError(
+            code=ResponseCode.VALIDATION_ERROR,
+            msg_key="password_too_weak",
+            data={"errors": {"password": password_errors}},
+        )
+
+    # Find and update user
+    user = await User.filter(email=data.email).first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.NOT_FOUND,
+            msg_key="user_not_found",
+        )
+
+    # Update password
+    user.hashed_password = security.get_password_hash(data.new_password)
+    # Reset login attempts
+    user.failed_login_attempts = 0
+    user.locked_until = None  # type: ignore[assignment]
+    await user.save()
+
+    return success(msg_key="password_reset_success")
