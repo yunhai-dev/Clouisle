@@ -38,7 +38,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """
     将 Pydantic 验证错误转换为统一响应格式，并返回字段级别的错误
     """
-    errors = {}
+    errors: dict[str, list[str]] = {}
     for err in exc.errors():
         # loc 是一个 tuple，如 ('body', 'email') 或 ('body', 'user', 'email')
         loc = err.get("loc", ())
@@ -50,13 +50,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         msg = err.get("msg", "Invalid value")
 
         # 如果同一字段有多个错误，用列表存储
-        if field in errors:
-            if isinstance(errors[field], list):
-                errors[field].append(msg)
-            else:
-                errors[field] = [errors[field], msg]
-        else:
-            errors[field] = msg
+        if field not in errors:
+            errors[field] = []
+        errors[field].append(msg)
 
     return JSONResponse(
         status_code=422,

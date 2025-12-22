@@ -52,7 +52,7 @@ class Team(models.Model):
     updated_at = fields.DatetimeField(auto_now=True)
 
     # Team owner (creator)
-    owner: fields.ForeignKeyRelation["User"] = fields.ForeignKeyField(
+    owner: fields.ForeignKeyRelation["User"] | None = fields.ForeignKeyField(
         "models.User", related_name="owned_teams", null=True, on_delete=fields.SET_NULL
     )
 

@@ -1,8 +1,8 @@
 from datetime import timedelta
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import jwt
-from passlib.context import CryptContext
+from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 from app.core.config import settings
 from app.core.timezone import now_utc
@@ -11,7 +11,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_access_token(
-    subject: Union[str, Any], expires_delta: timedelta = None
+    subject: Union[str, Any], expires_delta: Optional[timedelta] = None
 ) -> str:
     if expires_delta:
         expire = now_utc() + expires_delta

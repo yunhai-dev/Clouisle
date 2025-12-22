@@ -387,14 +387,14 @@ async def delete_account(
     allow_deletion = await SiteSetting.get_value("allow_account_deletion", True)
     if not allow_deletion:
         raise BusinessError(
-            code=ResponseCode.FORBIDDEN,
+            code=ResponseCode.PERMISSION_DENIED,
             msg_key="account_deletion_disabled",
         )
 
     # Superuser cannot delete their own account
     if current_user.is_superuser:
         raise BusinessError(
-            code=ResponseCode.FORBIDDEN,
+            code=ResponseCode.PERMISSION_DENIED,
             msg_key="cannot_delete_superuser_account",
         )
 

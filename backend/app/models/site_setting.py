@@ -1,3 +1,5 @@
+from typing import Any, Optional, TypedDict
+
 from tortoise import fields, models
 
 
@@ -39,16 +41,17 @@ class SiteSetting(models.Model):
     async def set_value(
         cls,
         key: str,
-        value,
+        value: Any,
         value_type: str = "string",
-        category: str = "general",
-        description: str = None,
+        category: Optional[str] = "general",
+        description: Optional[str] = None,
         is_public: bool = False,
     ):
         """Set setting value"""
         import json
 
         # Convert value to string for storage
+        str_value: Optional[str]
         if value_type == "bool":
             str_value = "true" if value else "false"
         elif value_type == "json":
@@ -67,18 +70,20 @@ class SiteSetting(models.Model):
             },
         )
         if not created:
-            setting.value = str_value
-            setting.value_type = value_type
-            if category:
-                setting.category = category
-            if description:
+            setting.value = str_value  # type: ignore[assignment]
+            setting.value_type = str(value_type)
+            if category is not None:
+                setting.category = category  # type: ignore[assignment]
+            if description is not None:
                 setting.description = description
             setting.is_public = is_public
             await setting.save()
         return setting
 
     @classmethod
-    async def get_all_by_category(cls, category: str = None, public_only: bool = False):
+    async def get_all_by_category(
+        cls, category: Optional[str] = None, public_only: bool = False
+    ) -> dict[str, Any]:
         """Get all settings, optionally filtered by category"""
         query = cls.all()
         if category:
@@ -90,7 +95,7 @@ class SiteSetting(models.Model):
         return {s.key: cls._convert_value(s.value, s.value_type) for s in settings}
 
     @staticmethod
-    def _convert_value(value: str, value_type: str):
+    def _convert_value(value: Optional[str], value_type: str) -> Any:
         """Convert string value to appropriate type"""
         import json
 
@@ -106,9 +111,16 @@ class SiteSetting(models.Model):
         else:
             return value
 
+class SettingConfig(TypedDict):
+    value: Any
+    type: str
+    category: str
+    public: bool
+    desc: str
+
 
 # Default settings definitions
-DEFAULT_SETTINGS = {
+DEFAULT_SETTINGS: dict[str, SettingConfig] = {
     # General
     "site_name": {
         "value": "Clouisle",

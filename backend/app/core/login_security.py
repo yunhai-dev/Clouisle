@@ -32,7 +32,7 @@ async def check_account_locked(user: User) -> Tuple[bool, Optional[int]]:
         return True, remaining
 
     # 锁定已过期，重置
-    user.locked_until = None
+    user.locked_until = None  # type: ignore[assignment]
     user.failed_login_attempts = 0
     await user.save()
     return False, None
@@ -69,7 +69,7 @@ async def reset_login_attempts(user: User):
     """
     if user.failed_login_attempts > 0 or user.locked_until is not None:
         user.failed_login_attempts = 0
-        user.locked_until = None
+        user.locked_until = None  # type: ignore[assignment]
         await user.save()
 
 

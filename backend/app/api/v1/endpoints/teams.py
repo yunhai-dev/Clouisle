@@ -383,11 +383,14 @@ async def update_team_member(
 
     # Get target membership
     target_user = await User.filter(id=user_id).first()
-    membership = (
-        await TeamMember.filter(team=team, user=target_user).first()
-        if target_user
-        else None
-    )
+    if not target_user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_not_found",
+            status_code=404,
+        )
+
+    membership = await TeamMember.filter(team=team, user=target_user).first()
     if not membership:
         raise BusinessError(
             code=ResponseCode.TEAM_MEMBER_NOT_FOUND,
@@ -446,11 +449,14 @@ async def remove_team_member(
 
     # Get target user
     target_user = await User.filter(id=user_id).first()
-    membership = (
-        await TeamMember.filter(team=team, user=target_user).first()
-        if target_user
-        else None
-    )
+    if not target_user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_not_found",
+            status_code=404,
+        )
+
+    membership = await TeamMember.filter(team=team, user=target_user).first()
     if not membership:
         raise BusinessError(
             code=ResponseCode.TEAM_MEMBER_NOT_FOUND,

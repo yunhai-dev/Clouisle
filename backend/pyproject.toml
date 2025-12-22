@@ -19,6 +19,7 @@ dependencies = [
     "bcrypt==4.0.1",
     "aiosmtplib>=3.0.0",
     "aiofiles>=25.1.0",
+    "types-aiofiles>=25.1.0.20251011",
 ]
 
 [dependency-groups]

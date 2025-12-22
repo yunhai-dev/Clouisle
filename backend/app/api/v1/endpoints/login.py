@@ -318,17 +318,18 @@ async def send_verification(
 
     # Check if email exists (for register purpose, email should belong to a user)
     user = await User.filter(email=data.email).first()
-    if data.purpose == "register" and not user:
-        raise BusinessError(
-            code=ResponseCode.NOT_FOUND,
-            msg_key="email_not_found",
-        )
+    if data.purpose == "register":
+        if not user:
+            raise BusinessError(
+                code=ResponseCode.NOT_FOUND,
+                msg_key="email_not_found",
+            )
 
-    if data.purpose == "register" and user.email_verified:
-        raise BusinessError(
-            code=ResponseCode.VALIDATION_ERROR,
-            msg_key="email_already_verified",
-        )
+        if user.email_verified:
+            raise BusinessError(
+                code=ResponseCode.VALIDATION_ERROR,
+                msg_key="email_already_verified",
+            )
 
     # Generate code and token
     code, token = await generate_verification_code(data.email, data.purpose)
@@ -533,7 +534,7 @@ async def reset_password(
     user.hashed_password = security.get_password_hash(data.new_password)
     # Reset login attempts
     user.failed_login_attempts = 0
-    user.locked_until = None
+    user.locked_until = None  # type: ignore[assignment]
     await user.save()
 
     return success(msg_key="password_reset_success")

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -21,7 +21,7 @@ router = APIRouter()
 async def read_permissions(
     page: int = 1,
     page_size: int = 50,
-    scope: str = None,
+    scope: Optional[str] = None,
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
@@ -117,7 +117,7 @@ async def update_permission(
 
     permission.scope = permission_in.scope
     permission.code = permission_in.code
-    permission.description = permission_in.description
+    permission.description = permission_in.description  # type: ignore[assignment]
     await permission.save()
 
     return success(data=permission, msg_key="permission_updated")

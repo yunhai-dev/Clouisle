@@ -1,6 +1,6 @@
-from typing import List, Union
+from typing import Any, List, Union
 
-from pydantic import AnyHttpUrl, validator
+from pydantic import validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
+    BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",  # Next.js dev server
     ]
 
@@ -38,11 +38,11 @@ class Settings(BaseSettings):
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):
-            return v
+            return list(v) if isinstance(v, list) else [v]
         raise ValueError(v)
 
     @validator("DATABASE_URL", pre=True)
-    def assemble_db_connection(cls, v: str, values: dict) -> str:
+    def assemble_db_connection(cls, v: str, values: dict[str, Any]) -> str:
         if isinstance(v, str) and v:
             return v
         return f"postgres://{values.get('POSTGRES_USER')}:{values.get('POSTGRES_PASSWORD')}@{values.get('POSTGRES_SERVER')}:{values.get('POSTGRES_PORT')}/{values.get('POSTGRES_DB')}"
