@@ -104,7 +104,8 @@ export function ForgotPasswordForm() {
       if (err instanceof ApiError) {
         if (err.isValidationError()) {
           setFieldErrors(err.getFieldErrors())
-        } else if (err.code === 'VERIFICATION_CODE_INVALID') {
+        } else if (err.code === 5005) {
+          // VERIFICATION_CODE_INVALID
           setFieldErrors({ code: t('verificationCodeInvalid') })
         }
       }

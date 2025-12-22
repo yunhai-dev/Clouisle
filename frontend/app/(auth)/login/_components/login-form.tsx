@@ -94,8 +94,8 @@ export function LoginForm() {
           // 字段级验证错误，显示在对应输入框下方
           setFieldErrors(err.getFieldErrors())
         }
-        // 验证码错误时刷新验证码
-        if (err.code === 'CAPTCHA_INVALID' || err.code === 'CAPTCHA_REQUIRED') {
+        // 验证码错误时刷新验证码 (CAPTCHA_INVALID = 5303, CAPTCHA_REQUIRED = 5302)
+        if (err.code === 5303 || err.code === 5302) {
           setFieldErrors({ captcha: t('captchaInvalid') })
           if (captchaEnabled) {
             loadCaptcha()

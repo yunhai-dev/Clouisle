@@ -2,7 +2,8 @@ import { api } from './client'
 
 export interface SiteSetting {
   key: string
-  value: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  value: any
   value_type: string
   category: string
   description?: string
@@ -10,7 +11,8 @@ export interface SiteSetting {
 }
 
 export interface SiteSettings {
-  settings: Record<string, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  settings: Record<string, any>
 }
 
 export interface PublicSiteSettings {
@@ -70,7 +72,8 @@ export const siteSettingsApi = {
   /**
    * Get all settings (admin only)
    */
-  async getAll(category?: string): Promise<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getAll(category?: string): Promise<Record<string, any>> {
     const params = category ? `?category=${category}` : ''
     const res = await api.get<SiteSettings>(`/site-settings${params}`)
     return res.settings
@@ -86,14 +89,16 @@ export const siteSettingsApi = {
   /**
    * Update a specific setting
    */
-  async update(key: string, value: unknown): Promise<SiteSetting> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async update(key: string, value: any): Promise<SiteSetting> {
     return api.put<SiteSetting>(`/site-settings/${key}`, { value })
   },
 
   /**
    * Bulk update multiple settings
    */
-  async bulkUpdate(settings: Record<string, unknown>): Promise<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async bulkUpdate(settings: Record<string, any>): Promise<Record<string, any>> {
     const res = await api.put<SiteSettings>('/site-settings', { settings })
     return res.settings
   },
@@ -101,7 +106,8 @@ export const siteSettingsApi = {
   /**
    * Reset settings to default values
    */
-  async reset(category?: string): Promise<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async reset(category?: string): Promise<Record<string, any>> {
     const params = category ? `?category=${category}` : ''
     const res = await api.post<SiteSettings>(`/site-settings/reset${params}`, null)
     return res.settings
@@ -127,7 +133,8 @@ export const siteSettingsApi = {
   /**
    * Update general settings
    */
-  async updateGeneral(data: Partial<GeneralSettings>): Promise<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async updateGeneral(data: Partial<GeneralSettings>): Promise<Record<string, any>> {
     return this.bulkUpdate(data)
   },
 
@@ -152,7 +159,8 @@ export const siteSettingsApi = {
   /**
    * Update security settings
    */
-  async updateSecurity(data: Partial<SecuritySettings>): Promise<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async updateSecurity(data: Partial<SecuritySettings>): Promise<Record<string, any>> {
     return this.bulkUpdate(data)
   },
 
@@ -176,7 +184,8 @@ export const siteSettingsApi = {
   /**
    * Update email settings
    */
-  async updateEmail(data: Partial<EmailSettings>): Promise<Record<string, unknown>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async updateEmail(data: Partial<EmailSettings>): Promise<Record<string, any>> {
     return this.bulkUpdate(data)
   },
 

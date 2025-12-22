@@ -140,7 +140,7 @@ export function TeamDetailDialog({
   // 加载用户列表（用于添加成员）
   const loadUsers = React.useCallback(async () => {
     try {
-      const data = await usersApi.getUsers(1, 100)
+      const data = await usersApi.getUsers({ page: 1, pageSize: 100 })
       setUsers(data.items)
     } catch {
       // 错误已由 API 客户端处理
