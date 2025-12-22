@@ -1,15 +1,26 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, EmailStr
 from tortoise.exceptions import DoesNotExist, IntegrityError
+from tortoise.expressions import Q
 
 from app.api import deps
 from app.core import security
+from app.core.i18n import t
+from app.core.email import (
+    send_email,
+    check_bulk_email_rate,
+    increment_bulk_email_count,
+    check_recipient_email_rate,
+    increment_recipient_email_count,
+)
 from app.models.user import User, Role
+from app.models.site_setting import SiteSetting
 from app.schemas.user import User as UserSchema, UserCreate, UserUpdate
-from app.schemas.response import Response, PageData, success
+from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success
 
 router = APIRouter()
 
@@ -18,19 +29,60 @@ router = APIRouter()
 async def read_users(
     page: int = 1,
     page_size: int = 20,
+    status: Optional[str] = Query(None, description="Filter by status: active, inactive, pending"),
+    search: Optional[str] = Query(None, description="Search by username or email"),
     current_user: User = Depends(deps.PermissionChecker("user:read")),
 ) -> Any:
     """
-    Retrieve users.
+    Retrieve users with optional filters.
     """
     skip = (page - 1) * page_size
-    total = await User.all().count()
-    users = await User.all().offset(skip).limit(page_size).prefetch_related("roles")
+    
+    # Build query
+    query = User.all()
+    
+    # Status filter
+    if status == "active":
+        query = query.filter(is_active=True)
+    elif status == "inactive":
+        query = query.filter(is_active=False)
+    elif status == "pending":
+        # Pending = inactive and email not verified (newly registered, waiting for approval)
+        query = query.filter(is_active=False)
+    
+    # Search filter
+    if search:
+        query = query.filter(
+            Q(username__icontains=search) | Q(email__icontains=search)
+        )
+    
+    total = await query.count()
+    users = await query.offset(skip).limit(page_size).prefetch_related("roles__permissions")
     return success(data={
         "items": users,
         "total": total,
         "page": page,
         "page_size": page_size,
+    })
+
+
+@router.get("/stats", response_model=Response[dict])
+async def get_user_stats(
+    current_user: User = Depends(deps.PermissionChecker("user:read")),
+) -> Any:
+    """
+    Get user statistics including pending approval count.
+    """
+    total = await User.all().count()
+    active = await User.filter(is_active=True).count()
+    inactive = await User.filter(is_active=False).count()
+    pending = await User.filter(is_active=False).count()  # Pending approval
+    
+    return success(data={
+        "total": total,
+        "active": active,
+        "inactive": inactive,
+        "pending": pending,
     })
 
 
@@ -43,23 +95,19 @@ async def create_user(
     """
     Create new user.
     """
-    try:
-        user_obj = await User.get(username=user_in.username)
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this username already exists in the system.",
+    existing_user = await User.filter(username=user_in.username).first()
+    if existing_user:
+        raise BusinessError(
+            code=ResponseCode.USERNAME_EXISTS,
+            msg_key="user_with_username_exists",
         )
-    except DoesNotExist:
-        pass
     
-    try:
-        user_obj = await User.get(email=user_in.email)
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system.",
+    existing_email = await User.filter(email=user_in.email).first()
+    if existing_email:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_EXISTS,
+            msg_key="user_with_email_exists",
         )
-    except DoesNotExist:
-        pass
 
     user_dict = user_in.model_dump(exclude_unset=True)
     password = user_dict.pop("password")
@@ -69,7 +117,106 @@ async def create_user(
         **user_dict,
         hashed_password=hashed_password,
     )
-    return success(data=user, msg="User created successfully")
+    user = await User.get(id=user.id).prefetch_related("roles__permissions")
+    return success(data=user, msg_key="user_created")
+
+
+class SendEmailRequest(BaseModel):
+    """发送邮件请求"""
+    subject: str
+    content: str
+    user_ids: List[UUID]
+
+
+@router.post("/send-email", response_model=Response[dict])
+async def send_email_to_users(
+    *,
+    data: SendEmailRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(deps.PermissionChecker("user:update")),
+) -> Any:
+    """
+    Send email to selected users with rate limiting protection.
+    """
+    # Check SMTP is enabled
+    smtp_enabled = await SiteSetting.get_value("smtp_enabled", False)
+    if not smtp_enabled:
+        raise BusinessError(
+            code=ResponseCode.EMAIL_SEND_FAILED,
+            msg_key="smtp_not_configured",
+        )
+    
+    # Check sender rate limit (100 emails per hour)
+    can_send, sent_count_hour, remaining = await check_bulk_email_rate(
+        str(current_user.id), max_per_hour=100
+    )
+    if not can_send:
+        raise BusinessError(
+            code=ResponseCode.RATE_LIMITED,
+            msg_key="email_rate_limit_exceeded",
+            data={"limit": 100, "period": "hour"},
+        )
+    
+    # Get users
+    users = await User.filter(id__in=data.user_ids).all()
+    if not users:
+        raise BusinessError(
+            code=ResponseCode.NOT_FOUND,
+            msg_key="user_not_found",
+        )
+    
+    # Check if we have enough quota
+    if len(users) > remaining:
+        raise BusinessError(
+            code=ResponseCode.RATE_LIMITED,
+            msg_key="email_quota_insufficient",
+            data={"requested": len(users), "remaining": remaining},
+        )
+    
+    # Filter out rate-limited recipients (5 emails per day per recipient)
+    sent_count = 0
+    skipped_count = 0
+    
+    for user in users:
+        if not user.email:
+            continue
+            
+        # Check recipient rate limit
+        can_receive, _ = await check_recipient_email_rate(user.email, max_per_day=5)
+        if not can_receive:
+            skipped_count += 1
+            continue
+        
+        # Queue email for sending
+        background_tasks.add_task(
+            send_email,
+            to_email=user.email,
+            subject=data.subject,
+            body_text=data.content,
+            body_html=f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                <p>Hi {user.username},</p>
+                <div style="margin: 20px 0; white-space: pre-wrap;">{data.content}</div>
+            </div>
+            """,
+        )
+        
+        # Increment recipient count
+        await increment_recipient_email_count(user.email)
+        sent_count += 1
+    
+    # Increment sender count
+    if sent_count > 0:
+        await increment_bulk_email_count(str(current_user.id), sent_count)
+    
+    return success(
+        data={
+            "sent_count": sent_count,
+            "skipped_count": skipped_count,
+            "total": len(users),
+        },
+        msg_key="email_queued",
+    )
 
 
 @router.put("/{user_id}", response_model=Response[UserSchema])
@@ -82,12 +229,12 @@ async def update_user(
     """
     Update a user.
     """
-    try:
-        user = await User.get(id=user_id)
-    except DoesNotExist:
-        raise HTTPException(
+    user = await User.filter(id=user_id).first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_with_id_not_exists",
             status_code=404,
-            detail="The user with this id does not exist in the system",
         )
         
     user_data = user_in.model_dump(exclude_unset=True)
@@ -100,12 +247,9 @@ async def update_user(
         role_names = user_data.pop("roles")
         roles = []
         for role_name in role_names:
-            try:
-                role = await Role.get(name=role_name)
+            role = await Role.filter(name=role_name).first()
+            if role:
                 roles.append(role)
-            except DoesNotExist:
-                # Optionally ignore or raise error
-                pass
         await user.roles.clear()
         await user.roles.add(*roles)
 
@@ -113,8 +257,8 @@ async def update_user(
     await user.save()
     
     # Refresh to get updated relations
-    updated_user = await User.get(id=user_id).prefetch_related("roles")
-    return success(data=updated_user, msg="User updated successfully")
+    updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
+    return success(data=updated_user, msg_key="user_updated")
 
 
 @router.get("/me", response_model=Response[UserSchema])
@@ -127,6 +271,129 @@ async def read_user_me(
     return success(data=current_user)
 
 
+class UpdateProfileRequest(BaseModel):
+    """更新个人资料请求"""
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    avatar_url: Optional[str] = None
+
+
+@router.put("/me", response_model=Response[UserSchema])
+async def update_user_me(
+    *,
+    data: UpdateProfileRequest,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Update current user profile.
+    """
+    update_data = data.model_dump(exclude_unset=True)
+    
+    # Check username uniqueness
+    if "username" in update_data and update_data["username"] != current_user.username:
+        existing = await User.filter(username=update_data["username"]).first()
+        if existing:
+            raise BusinessError(
+                code=ResponseCode.USERNAME_EXISTS,
+                msg_key="user_with_username_exists",
+            )
+    
+    # Check email uniqueness
+    if "email" in update_data and update_data["email"] != current_user.email:
+        existing = await User.filter(email=update_data["email"]).first()
+        if existing:
+            raise BusinessError(
+                code=ResponseCode.EMAIL_EXISTS,
+                msg_key="user_with_email_exists",
+            )
+        # If email changed, mark as unverified
+        update_data["email_verified"] = False
+    
+    await current_user.update_from_dict(update_data)
+    await current_user.save()
+    
+    updated_user = await User.get(id=current_user.id).prefetch_related("roles__permissions")
+    return success(data=updated_user, msg_key="profile_updated")
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求"""
+    current_password: str
+    new_password: str
+
+
+@router.post("/me/change-password", response_model=Response[None])
+async def change_password(
+    *,
+    data: ChangePasswordRequest,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Change current user password.
+    """
+    # Verify current password
+    if not security.verify_password(data.current_password, current_user.hashed_password):
+        raise BusinessError(
+            code=ResponseCode.INVALID_CREDENTIALS,
+            msg_key="current_password_incorrect",
+        )
+    
+    # Validate new password length
+    if len(data.new_password) < 6:
+        raise BusinessError(
+            code=ResponseCode.VALIDATION_ERROR,
+            msg_key="password_too_short",
+        )
+    
+    # Update password
+    current_user.hashed_password = security.get_password_hash(data.new_password)
+    await current_user.save()
+    
+    return success(msg_key="password_changed")
+
+
+class DeleteAccountRequest(BaseModel):
+    """删除账号请求"""
+    password: str
+
+
+@router.delete("/me", response_model=Response[None])
+async def delete_account(
+    *,
+    data: DeleteAccountRequest,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Delete current user account.
+    """
+    # Check if account deletion is allowed
+    allow_deletion = await SiteSetting.get_value("allow_account_deletion", True)
+    if not allow_deletion:
+        raise BusinessError(
+            code=ResponseCode.FORBIDDEN,
+            msg_key="account_deletion_disabled",
+        )
+    
+    # Superuser cannot delete their own account
+    if current_user.is_superuser:
+        raise BusinessError(
+            code=ResponseCode.FORBIDDEN,
+            msg_key="cannot_delete_superuser_account",
+        )
+    
+    # Verify password
+    if not security.verify_password(data.password, current_user.hashed_password):
+        raise BusinessError(
+            code=ResponseCode.INVALID_CREDENTIALS,
+            msg_key="current_password_incorrect",
+        )
+    
+    # Delete user
+    await current_user.delete()
+    
+    return success(msg_key="account_deleted")
+
+
 @router.get("/{user_id}", response_model=Response[UserSchema])
 async def read_user_by_id(
     user_id: UUID,
@@ -135,14 +402,78 @@ async def read_user_by_id(
     """
     Get a specific user by id.
     """
-    try:
-        user = await User.get(id=user_id).prefetch_related("roles")
-        return success(data=user)
-    except DoesNotExist:
-        raise HTTPException(
+    user = await User.filter(id=user_id).prefetch_related("roles__permissions").first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_with_id_not_exists",
             status_code=404,
-            detail="The user with this id does not exist in the system",
         )
+    return success(data=user)
+
+
+@router.post("/{user_id}/activate", response_model=Response[UserSchema])
+async def activate_user(
+    user_id: UUID,
+    current_user: User = Depends(deps.PermissionChecker("user:update")),
+) -> Any:
+    """
+    Activate a user (admin approval for new registrations).
+    """
+    user = await User.filter(id=user_id).first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_with_id_not_exists",
+            status_code=404,
+        )
+    
+    if user.is_active:
+        raise BusinessError(
+            code=ResponseCode.USER_ALREADY_ACTIVE,
+            msg_key="user_already_active",
+        )
+    
+    user.is_active = True
+    await user.save()
+    
+    updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
+    return success(data=updated_user, msg_key="user_activated")
+
+
+@router.post("/{user_id}/deactivate", response_model=Response[UserSchema])
+async def deactivate_user(
+    user_id: UUID,
+    current_user: User = Depends(deps.PermissionChecker("user:update")),
+) -> Any:
+    """
+    Deactivate a user.
+    """
+    user = await User.filter(id=user_id).first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_with_id_not_exists",
+            status_code=404,
+        )
+    
+    if user.is_superuser:
+        raise BusinessError(
+            code=ResponseCode.CANNOT_DEACTIVATE_SUPERUSER,
+            msg_key="cannot_deactivate_superuser",
+        )
+    
+    if not user.is_active:
+        raise BusinessError(
+            code=ResponseCode.USER_ALREADY_INACTIVE,
+            msg_key="user_already_inactive",
+        )
+    
+    user.is_active = False
+    await user.save()
+    
+    updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
+    return success(data=updated_user, msg_key="user_deactivated")
 
 
 @router.delete("/{user_id}", response_model=Response[UserSchema])
@@ -153,19 +484,19 @@ async def delete_user(
     """
     Delete a user.
     """
-    try:
-        user = await User.get(id=user_id)
-    except DoesNotExist:
-        raise HTTPException(
+    user = await User.filter(id=user_id).prefetch_related("roles__permissions").first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_with_id_not_exists",
             status_code=404,
-            detail="The user with this id does not exist in the system",
         )
     
     if user.is_superuser:
-         raise HTTPException(
-            status_code=400,
-            detail="Superusers cannot be deleted",
+        raise BusinessError(
+            code=ResponseCode.CANNOT_DELETE_SUPERUSER,
+            msg_key="cannot_delete_superuser",
         )
 
     await user.delete()
-    return success(data=user, msg="User deleted successfully")
+    return success(data=user, msg_key="user_deleted")

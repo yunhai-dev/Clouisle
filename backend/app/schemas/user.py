@@ -48,7 +48,6 @@ class UserBase(BaseModel):
     email: EmailStr
     is_active: Optional[bool] = True
     is_superuser: Optional[bool] = False
-    department_id: Optional[str] = None
     avatar_url: Optional[str] = None
 
 
@@ -60,7 +59,6 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
-    department_id: Optional[str] = None
     avatar_url: Optional[str] = None
     roles: Optional[List[str]] = None  # List of role names
 
@@ -71,6 +69,7 @@ class UserInDBBase(UserBase):
     last_login: Optional[datetime] = None
     auth_source: str
     external_id: Optional[str] = None
+    email_verified: bool = False
 
     class Config:
         from_attributes = True

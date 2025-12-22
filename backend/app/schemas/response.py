@@ -25,53 +25,87 @@ class ResponseCode(IntEnum):
     # 权限错误 (3000-3999)
     PERMISSION_DENIED = 3000
     INSUFFICIENT_PRIVILEGES = 3001
+    NOT_TEAM_MEMBER = 3002
+    TEAM_ADMIN_REQUIRED = 3003
+    TEAM_OWNER_REQUIRED = 3004
     
     # 资源错误 (4000-4999)
     NOT_FOUND = 4000
     USER_NOT_FOUND = 4001
     ROLE_NOT_FOUND = 4002
     PERMISSION_NOT_FOUND = 4003
+    TEAM_NOT_FOUND = 4004
+    TEAM_MEMBER_NOT_FOUND = 4005
     
-    # 业务逻辑错误 (5000-5999)
-    ALREADY_EXISTS = 5000
-    USERNAME_EXISTS = 5001
-    EMAIL_EXISTS = 5002
-    ROLE_NAME_EXISTS = 5003
-    PERMISSION_CODE_EXISTS = 5004
-    CANNOT_DELETE_SYSTEM_ROLE = 5010
-    CANNOT_DELETE_SUPERUSER = 5011
-    CANNOT_DELETE_WILDCARD_PERMISSION = 5012
-    CANNOT_MODIFY_SYSTEM_ROLE = 5013
-    ROLE_IN_USE = 5020
+    # 注册相关错误 (5000-5099)
+    REGISTRATION_DISABLED = 5000
+    ALREADY_EXISTS = 5001
+    USERNAME_EXISTS = 5002
+    EMAIL_EXISTS = 5003
+    EMAIL_NOT_VERIFIED = 5004
+    VERIFICATION_CODE_INVALID = 5005
+    VERIFICATION_CODE_EXPIRED = 5006
+    EMAIL_SEND_FAILED = 5007
+    EMAIL_SEND_TOO_FREQUENT = 5008
+    # 资源重复错误 (5100-5199)
+    ROLE_NAME_EXISTS = 5100
+    PERMISSION_CODE_EXISTS = 5101
+    TEAM_NAME_EXISTS = 5102
+    ALREADY_TEAM_MEMBER = 5103
+    # 操作禁止错误 (5200-5299)
+    CANNOT_DELETE_SYSTEM_ROLE = 5200
+    CANNOT_DELETE_SUPERUSER = 5201
+    CANNOT_DELETE_WILDCARD_PERMISSION = 5202
+    CANNOT_MODIFY_SYSTEM_ROLE = 5203
+    CANNOT_DELETE_DEFAULT_TEAM = 5204
+    CANNOT_ADD_AS_OWNER = 5205
+    CANNOT_CHANGE_OWNER_ROLE = 5206
+    CANNOT_PROMOTE_TO_OWNER = 5207
+    CANNOT_REMOVE_OWNER = 5208
+    OWNER_CANNOT_LEAVE = 5209
+    ROLE_IN_USE = 5210
+    USER_ALREADY_ACTIVE = 5211
+    USER_ALREADY_INACTIVE = 5212
+    CANNOT_DEACTIVATE_SUPERUSER = 5213
+    
+    # 登录安全错误 (5300-5399)
+    ACCOUNT_LOCKED = 5300
+    TOO_MANY_LOGIN_ATTEMPTS = 5301
+    CAPTCHA_REQUIRED = 5302
+    CAPTCHA_INVALID = 5303
+    
+    # 速率限制错误 (5400-5499)
+    RATE_LIMITED = 5400
 
 
-# 状态码对应的默认消息
-CODE_MESSAGES: dict[ResponseCode, str] = {
-    ResponseCode.SUCCESS: "Success",
-    ResponseCode.UNKNOWN_ERROR: "Unknown error",
-    ResponseCode.VALIDATION_ERROR: "Validation error",
-    ResponseCode.UNAUTHORIZED: "Unauthorized",
-    ResponseCode.INVALID_TOKEN: "Invalid token",
-    ResponseCode.TOKEN_EXPIRED: "Token expired",
-    ResponseCode.INVALID_CREDENTIALS: "Invalid credentials",
-    ResponseCode.INACTIVE_USER: "Inactive user",
-    ResponseCode.PERMISSION_DENIED: "Permission denied",
-    ResponseCode.INSUFFICIENT_PRIVILEGES: "Insufficient privileges",
-    ResponseCode.NOT_FOUND: "Resource not found",
-    ResponseCode.USER_NOT_FOUND: "User not found",
-    ResponseCode.ROLE_NOT_FOUND: "Role not found",
-    ResponseCode.PERMISSION_NOT_FOUND: "Permission not found",
-    ResponseCode.ALREADY_EXISTS: "Resource already exists",
-    ResponseCode.USERNAME_EXISTS: "Username already exists",
-    ResponseCode.EMAIL_EXISTS: "Email already exists",
-    ResponseCode.ROLE_NAME_EXISTS: "Role name already exists",
-    ResponseCode.PERMISSION_CODE_EXISTS: "Permission code already exists",
-    ResponseCode.CANNOT_DELETE_SYSTEM_ROLE: "Cannot delete system role",
-    ResponseCode.CANNOT_DELETE_SUPERUSER: "Cannot delete superuser",
-    ResponseCode.CANNOT_DELETE_WILDCARD_PERMISSION: "Cannot delete wildcard permission",
-    ResponseCode.CANNOT_MODIFY_SYSTEM_ROLE: "Cannot modify system role",
-    ResponseCode.ROLE_IN_USE: "Role is assigned to users and cannot be deleted",
-}
+class BusinessError(Exception):
+    """
+    业务逻辑异常
+    
+    用于在接口中抛出业务错误，会被全局异常处理器捕获并转换为统一响应格式。
+    
+    Usage:
+        raise BusinessError(
+            code=ResponseCode.USERNAME_EXISTS,
+            msg_key="username_already_registered"
+        )
+    """
+    def __init__(
+        self,
+        code: ResponseCode | int = ResponseCode.UNKNOWN_ERROR,
+        msg: str | None = None,
+        msg_key: str | None = None,
+        status_code: int = 400,
+        data: Any = None,
+        **kwargs
+    ):
+        self.code = code
+        self.msg = msg
+        self.msg_key = msg_key
+        self.status_code = status_code
+        self.data = data
+        self.kwargs = kwargs
+        super().__init__(msg or msg_key or str(code))
 
 
 class Response(BaseModel, Generic[T]):
@@ -95,17 +129,47 @@ class PageResponse(Response[PageData[T]], Generic[T]):
 
 
 # 便捷函数
-def success(data: Any = None, msg: str = "success") -> dict:
-    """成功响应"""
+def success(data: Any = None, msg: str | None = None, msg_key: str = "success", **kwargs) -> dict:
+    """
+    成功响应
+    
+    Args:
+        data: 响应数据
+        msg: 直接指定消息（优先级高于msg_key）
+        msg_key: 翻译消息的key
+        **kwargs: 消息格式化参数
+    """
+    from app.core.i18n import t
+    
+    if msg is None:
+        msg = t(msg_key, **kwargs)
     return {"code": ResponseCode.SUCCESS, "data": data, "msg": msg}
 
 
 def error(
     code: ResponseCode | int = ResponseCode.UNKNOWN_ERROR, 
-    msg: str | None = None, 
-    data: Any = None
+    msg: str | None = None,
+    msg_key: str | None = None,
+    data: Any = None,
+    **kwargs
 ) -> dict:
-    """错误响应"""
-    if msg is None and isinstance(code, ResponseCode):
-        msg = CODE_MESSAGES.get(code, "Error")
-    return {"code": int(code), "data": data, "msg": msg or "Error"}
+    """
+    错误响应
+    
+    Args:
+        code: 错误码
+        msg: 直接指定消息（优先级最高）
+        msg_key: 翻译消息的key（优先级次之）
+        data: 响应数据
+        **kwargs: 消息格式化参数
+    """
+    from app.core.i18n import t, get_code_message
+    
+    if msg is None:
+        if msg_key:
+            msg = t(msg_key, **kwargs)
+        elif isinstance(code, ResponseCode):
+            msg = get_code_message(code)
+        else:
+            msg = t("unknown_error")
+    return {"code": int(code), "data": data, "msg": msg}

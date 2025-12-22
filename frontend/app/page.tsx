@@ -1,5 +1,6 @@
-import { ComponentExample } from "@/components/component-example";
+import { redirect } from 'next/navigation'
 
-export default function Page() {
-return <ComponentExample />;
+export default function Home() {
+  // TODO: Check auth status and redirect accordingly
+  redirect('/dashboard')
 }

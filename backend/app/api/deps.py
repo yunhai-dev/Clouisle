@@ -8,8 +8,11 @@ from tortoise.exceptions import DoesNotExist
 
 from app.core.config import settings
 from app.core.security import settings as security_settings
+from app.core.i18n import t
+from app.core.redis import is_token_blacklisted
 from app.models.user import User
 from app.schemas.token import TokenPayload
+from app.schemas.response import ResponseCode, BusinessError
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/login/access-token"
@@ -17,27 +20,40 @@ reusable_oauth2 = OAuth2PasswordBearer(
 
 
 async def get_current_user(token: str = Depends(reusable_oauth2)) -> User:
+    # 检查 token 是否在黑名单中
+    if await is_token_blacklisted(token):
+        raise BusinessError(
+            code=ResponseCode.INVALID_TOKEN,
+            msg_key="token_revoked",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         token_data = TokenPayload(**payload)
     except (jwt.PyJWTError, ValidationError):
-        raise HTTPException(
+        raise BusinessError(
+            code=ResponseCode.INVALID_CREDENTIALS,
+            msg_key="could_not_validate_credentials",
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
         )
     
     if token_data.sub is None:
-        raise HTTPException(
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_not_found",
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
         )
         
-    try:
-        user = await User.get(id=token_data.sub).prefetch_related("roles__permissions")
-    except DoesNotExist:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.filter(id=token_data.sub).prefetch_related("roles__permissions").first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     
     return user
 
@@ -46,7 +62,10 @@ async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise BusinessError(
+            code=ResponseCode.INACTIVE_USER,
+            msg_key="inactive_user",
+        )
     return current_user
 
 
@@ -54,8 +73,10 @@ async def get_current_active_superuser(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=400, detail="The user doesn't have enough privileges"
+        raise BusinessError(
+            code=ResponseCode.INSUFFICIENT_PRIVILEGES,
+            msg_key="insufficient_privileges",
+            status_code=status.HTTP_403_FORBIDDEN,
         )
     return current_user
 
@@ -82,9 +103,11 @@ class PermissionChecker:
                 break
         
         if not has_permission:
-            raise HTTPException(
+            raise BusinessError(
+                code=ResponseCode.PERMISSION_DENIED,
+                msg_key="operation_not_permitted",
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Operation not permitted. Required: {self.required_permission}",
+                permission=self.required_permission,
             )
         
         return current_user

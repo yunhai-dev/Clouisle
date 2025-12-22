@@ -1,4 +1,4 @@
-# 云屿 (Clouisle)：下一代企业级分布式智能知识平台
+# 云屿 (Clouisle)：下一代企业级可成长智能知识平台
 
 [![CI Check](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml/badge.svg)](https://github.com/yunhai-dev/Clouisle/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)

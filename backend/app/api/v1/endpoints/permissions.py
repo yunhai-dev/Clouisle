@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from tortoise.exceptions import DoesNotExist, IntegrityError
 
 from app.api import deps
+from app.core.i18n import t
 from app.models.user import Permission, User
 from app.schemas.user import Permission as PermissionSchema, PermissionCreate
-from app.schemas.response import Response, PageData, success
+from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success
 
 router = APIRouter()
 
@@ -47,18 +48,20 @@ async def create_permission(
     """
     Create new permission.
     """
-    try:
-        permission = await Permission.create(
-            scope=permission_in.scope,
-            code=permission_in.code,
-            description=permission_in.description,
+    # Check if permission code already exists
+    existing = await Permission.filter(code=permission_in.code).first()
+    if existing:
+        raise BusinessError(
+            code=ResponseCode.PERMISSION_CODE_EXISTS,
+            msg_key="permission_with_code_exists",
         )
-        return success(data=permission, msg="Permission created successfully")
-    except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail="Permission with this code already exists",
-        )
+    
+    permission = await Permission.create(
+        scope=permission_in.scope,
+        code=permission_in.code,
+        description=permission_in.description,
+    )
+    return success(data=permission, msg_key="permission_created")
 
 
 @router.get("/{permission_id}", response_model=Response[PermissionSchema])
@@ -69,14 +72,14 @@ async def read_permission(
     """
     Get permission by ID.
     """
-    try:
-        permission = await Permission.get(id=permission_id)
-        return success(data=permission)
-    except DoesNotExist:
-        raise HTTPException(
+    permission = await Permission.filter(id=permission_id).first()
+    if not permission:
+        raise BusinessError(
+            code=ResponseCode.PERMISSION_NOT_FOUND,
+            msg_key="permission_not_found",
             status_code=404,
-            detail="Permission not found",
         )
+    return success(data=permission)
 
 
 @router.put("/{permission_id}", response_model=Response[PermissionSchema])
@@ -89,21 +92,21 @@ async def update_permission(
     """
     Update a permission.
     """
-    try:
-        permission = await Permission.get(id=permission_id)
-    except DoesNotExist:
-        raise HTTPException(
+    permission = await Permission.filter(id=permission_id).first()
+    if not permission:
+        raise BusinessError(
+            code=ResponseCode.PERMISSION_NOT_FOUND,
+            msg_key="permission_not_found",
             status_code=404,
-            detail="Permission not found",
         )
     
     # Check if code is being changed and if it conflicts
     if permission_in.code != permission.code:
         existing = await Permission.filter(code=permission_in.code).first()
         if existing:
-            raise HTTPException(
-                status_code=400,
-                detail="Permission with this code already exists",
+            raise BusinessError(
+                code=ResponseCode.PERMISSION_CODE_EXISTS,
+                msg_key="permission_with_code_exists",
             )
     
     permission.scope = permission_in.scope
@@ -111,7 +114,7 @@ async def update_permission(
     permission.description = permission_in.description
     await permission.save()
     
-    return success(data=permission, msg="Permission updated successfully")
+    return success(data=permission, msg_key="permission_updated")
 
 
 @router.delete("/{permission_id}", response_model=Response[PermissionSchema])
@@ -122,20 +125,20 @@ async def delete_permission(
     """
     Delete a permission.
     """
-    try:
-        permission = await Permission.get(id=permission_id)
-    except DoesNotExist:
-        raise HTTPException(
+    permission = await Permission.filter(id=permission_id).first()
+    if not permission:
+        raise BusinessError(
+            code=ResponseCode.PERMISSION_NOT_FOUND,
+            msg_key="permission_not_found",
             status_code=404,
-            detail="Permission not found",
         )
     
     # Prevent deleting the wildcard permission
     if permission.code == "*":
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete the system wildcard permission",
+        raise BusinessError(
+            code=ResponseCode.CANNOT_DELETE_WILDCARD_PERMISSION,
+            msg_key="cannot_delete_wildcard_permission",
         )
     
     await permission.delete()
-    return success(data=permission, msg="Permission deleted successfully")
+    return success(data=permission, msg_key="permission_deleted")

@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Clouisle"
     API_V1_STR: str = "/api/v1"
     
+    # Timezone
+    TIMEZONE: str = "Asia/Shanghai"
+    
     # Security
     SECRET_KEY: str = "changethis-to-a-secure-random-secret-key"
     ALGORITHM: str = "HS256"
@@ -26,7 +29,9 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
+        "http://localhost:3000",  # Next.js dev server
+    ]
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

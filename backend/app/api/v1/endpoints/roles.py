@@ -6,9 +6,10 @@ from pydantic import BaseModel
 from tortoise.exceptions import DoesNotExist, IntegrityError
 
 from app.api import deps
+from app.core.i18n import t
 from app.models.user import Role, Permission, User
 from app.schemas.user import Role as RoleSchema, RoleCreate
-from app.schemas.response import Response, PageData, success
+from app.schemas.response import Response, PageData, ResponseCode, BusinessError, success
 
 router = APIRouter()
 
@@ -52,30 +53,30 @@ async def create_role(
     """
     Create new role.
     """
-    try:
-        role = await Role.create(
-            name=role_in.name,
-            description=role_in.description,
-            is_system_role=False,
+    # Check if role name already exists
+    existing = await Role.filter(name=role_in.name).first()
+    if existing:
+        raise BusinessError(
+            code=ResponseCode.ROLE_NAME_EXISTS,
+            msg_key="role_with_name_exists",
         )
-        
-        # Add permissions
-        if role_in.permissions:
-            for perm_code in role_in.permissions:
-                try:
-                    perm = await Permission.get(code=perm_code)
-                    await role.permissions.add(perm)
-                except DoesNotExist:
-                    pass  # Skip non-existent permissions
-        
-        # Reload with permissions
-        role = await Role.get(id=role.id).prefetch_related("permissions")
-        return success(data=role, msg="Role created successfully")
-    except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail="Role with this name already exists",
-        )
+    
+    role = await Role.create(
+        name=role_in.name,
+        description=role_in.description,
+        is_system_role=False,
+    )
+    
+    # Add permissions
+    if role_in.permissions:
+        for perm_code in role_in.permissions:
+            perm = await Permission.filter(code=perm_code).first()
+            if perm:
+                await role.permissions.add(perm)
+    
+    # Reload with permissions
+    role = await Role.get(id=role.id).prefetch_related("permissions")
+    return success(data=role, msg_key="role_created")
 
 
 @router.get("/{role_id}", response_model=Response[RoleSchema])
@@ -86,14 +87,14 @@ async def read_role(
     """
     Get role by ID.
     """
-    try:
-        role = await Role.get(id=role_id).prefetch_related("permissions")
-        return success(data=role)
-    except DoesNotExist:
-        raise HTTPException(
+    role = await Role.filter(id=role_id).prefetch_related("permissions").first()
+    if not role:
+        raise BusinessError(
+            code=ResponseCode.ROLE_NOT_FOUND,
+            msg_key="role_not_found",
             status_code=404,
-            detail="Role not found",
         )
+    return success(data=role)
 
 
 @router.put("/{role_id}", response_model=Response[RoleSchema])
@@ -106,27 +107,27 @@ async def update_role(
     """
     Update a role.
     """
-    try:
-        role = await Role.get(id=role_id)
-    except DoesNotExist:
-        raise HTTPException(
+    role = await Role.filter(id=role_id).first()
+    if not role:
+        raise BusinessError(
+            code=ResponseCode.ROLE_NOT_FOUND,
+            msg_key="role_not_found",
             status_code=404,
-            detail="Role not found",
         )
     
     if role.is_system_role:
-        raise HTTPException(
-            status_code=400,
-            detail="System roles cannot be modified",
+        raise BusinessError(
+            code=ResponseCode.CANNOT_MODIFY_SYSTEM_ROLE,
+            msg_key="cannot_modify_system_role",
         )
     
     # Check if name is being changed and if it conflicts
     if role_in.name and role_in.name != role.name:
         existing = await Role.filter(name=role_in.name).first()
         if existing:
-            raise HTTPException(
-                status_code=400,
-                detail="Role with this name already exists",
+            raise BusinessError(
+                code=ResponseCode.ROLE_NAME_EXISTS,
+                msg_key="role_with_name_exists",
             )
         role.name = role_in.name
     
@@ -136,7 +137,7 @@ async def update_role(
     await role.save()
     
     role = await Role.get(id=role_id).prefetch_related("permissions")
-    return success(data=role, msg="Role updated successfully")
+    return success(data=role, msg_key="role_updated")
 
 
 @router.put("/{role_id}/permissions", response_model=Response[RoleSchema])
@@ -149,18 +150,18 @@ async def update_role_permissions(
     """
     Update role permissions (replace all).
     """
-    try:
-        role = await Role.get(id=role_id)
-    except DoesNotExist:
-        raise HTTPException(
+    role = await Role.filter(id=role_id).first()
+    if not role:
+        raise BusinessError(
+            code=ResponseCode.ROLE_NOT_FOUND,
+            msg_key="role_not_found",
             status_code=404,
-            detail="Role not found",
         )
     
     if role.is_system_role:
-        raise HTTPException(
-            status_code=400,
-            detail="System role permissions cannot be modified",
+        raise BusinessError(
+            code=ResponseCode.CANNOT_MODIFY_SYSTEM_ROLE,
+            msg_key="cannot_modify_system_role_permissions",
         )
     
     # Clear existing permissions
@@ -168,17 +169,17 @@ async def update_role_permissions(
     
     # Add new permissions
     for perm_code in permissions_in.permissions:
-        try:
-            perm = await Permission.get(code=perm_code)
-            await role.permissions.add(perm)
-        except DoesNotExist:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Permission '{perm_code}' not found",
+        perm = await Permission.filter(code=perm_code).first()
+        if not perm:
+            raise BusinessError(
+                code=ResponseCode.PERMISSION_NOT_FOUND,
+                msg_key="permission_code_not_found",
+                perm_code=perm_code,
             )
+        await role.permissions.add(perm)
     
     role = await Role.get(id=role_id).prefetch_related("permissions")
-    return success(data=role, msg="Role permissions updated successfully")
+    return success(data=role, msg_key="role_permissions_updated")
 
 
 @router.delete("/{role_id}", response_model=Response[RoleSchema])
@@ -189,27 +190,28 @@ async def delete_role(
     """
     Delete a role.
     """
-    try:
-        role = await Role.get(id=role_id).prefetch_related("permissions")
-    except DoesNotExist:
-        raise HTTPException(
+    role = await Role.filter(id=role_id).prefetch_related("permissions").first()
+    if not role:
+        raise BusinessError(
+            code=ResponseCode.ROLE_NOT_FOUND,
+            msg_key="role_not_found",
             status_code=404,
-            detail="Role not found",
         )
     
     if role.is_system_role:
-        raise HTTPException(
-            status_code=400,
-            detail="System roles cannot be deleted",
+        raise BusinessError(
+            code=ResponseCode.CANNOT_DELETE_SYSTEM_ROLE,
+            msg_key="cannot_delete_system_role",
         )
     
     # Check if role is assigned to any users
     users_with_role = await User.filter(roles=role).count()
     if users_with_role > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete role: {users_with_role} user(s) are assigned to this role",
+        raise BusinessError(
+            code=ResponseCode.ROLE_IN_USE,
+            msg_key="role_in_use",
+            count=users_with_role,
         )
     
     await role.delete()
-    return success(data=role, msg="Role deleted successfully")
+    return success(data=role, msg_key="role_deleted")
