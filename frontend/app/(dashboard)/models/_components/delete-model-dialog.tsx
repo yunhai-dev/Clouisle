@@ -4,7 +4,6 @@ import * as React from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { modelsApi, type Model } from '@/lib/api'
-import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
   AlertDialogAction,

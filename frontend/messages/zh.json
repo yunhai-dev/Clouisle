@@ -494,7 +494,6 @@
     "advanced": "高级配置",
     "modelIdentity": "模型标识",
     "apiConfig": "API 配置",
-    "status": "状态",
     "contextConfig": "上下文配置",
     "priceConfig": "价格配置",
     "inferenceParams": "推理参数",

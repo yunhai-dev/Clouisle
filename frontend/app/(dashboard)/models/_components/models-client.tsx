@@ -16,7 +16,6 @@ import {
   Star,
   Power,
   PowerOff,
-  Zap,
   TestTube,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -115,7 +114,37 @@ export function ModelsClient() {
   const loadModels = React.useCallback(async () => {
     setIsLoading(true)
     try {
-      const data = await modelsApi.getModels({ page, pageSize })
+      // 构建筛选参数
+      const params: {
+        page: number
+        pageSize: number
+        provider?: string
+        model_type?: string
+        is_enabled?: boolean
+        search?: string
+      } = { page, pageSize }
+      
+      // 搜索关键词
+      if (searchQuery) {
+        params.search = searchQuery
+      }
+      
+      // 供应商筛选（只支持单选，取第一个）
+      if (providerFilter.size > 0) {
+        params.provider = Array.from(providerFilter)[0]
+      }
+      
+      // 类型筛选（只支持单选，取第一个）
+      if (typeFilter.size > 0) {
+        params.model_type = Array.from(typeFilter)[0]
+      }
+      
+      // 状态筛选
+      if (statusFilter.size === 1) {
+        params.is_enabled = statusFilter.has('enabled')
+      }
+      
+      const data = await modelsApi.getModels(params)
       setModels(data.items)
       setPageData(data)
     } catch {
@@ -123,45 +152,14 @@ export function ModelsClient() {
     } finally {
       setIsLoading(false)
     }
-  }, [page, pageSize])
+  }, [page, pageSize, searchQuery, providerFilter, typeFilter, statusFilter])
   
   React.useEffect(() => {
     loadModels()
   }, [loadModels])
   
-  // 筛选模型
-  const filteredModels = React.useMemo(() => {
-    return models.filter(model => {
-      // 搜索筛选
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        if (!model.name.toLowerCase().includes(query) &&
-            !model.model_id.toLowerCase().includes(query)) {
-          return false
-        }
-      }
-      
-      // 供应商筛选
-      if (providerFilter.size > 0 && !providerFilter.has(model.provider)) {
-        return false
-      }
-      
-      // 类型筛选
-      if (typeFilter.size > 0 && !typeFilter.has(model.model_type)) {
-        return false
-      }
-      
-      // 状态筛选
-      if (statusFilter.size > 0) {
-        const status = model.is_enabled ? 'enabled' : 'disabled'
-        if (!statusFilter.has(status)) {
-          return false
-        }
-      }
-      
-      return true
-    })
-  }, [models, searchQuery, providerFilter, typeFilter, statusFilter])
+  // 筛选由服务端处理，models 已经是筛选后的结果
+  const filteredModels = models
   
   // 检查是否有筛选条件
   const isFiltered = searchQuery || providerFilter.size > 0 || typeFilter.size > 0 || statusFilter.size > 0
@@ -172,7 +170,13 @@ export function ModelsClient() {
     setProviderFilter(new Set())
     setTypeFilter(new Set())
     setStatusFilter(new Set())
+    setPage(1) // 重置到第一页
   }
+  
+  // 筛选条件变化时重置到第一页
+  React.useEffect(() => {
+    setPage(1)
+  }, [searchQuery, providerFilter, typeFilter, statusFilter])
   
   // 供应商选项 - 只显示模型列表中存在的供应商
   const providerOptions = React.useMemo(() => {
@@ -266,14 +270,17 @@ export function ModelsClient() {
   
   // 测试连接
   const handleTestConnection = async (model: Model) => {
+    const toastId = toast.loading(t('testing'))
     try {
       const result = await modelsApi.testConnection(model.id)
-      if (result.status === 'success') {
-        toast.success(t('testSuccess'))
+      if (result.success) {
+        const latencyInfo = result.latency_ms ? ` (${result.latency_ms}ms)` : ''
+        toast.success(`${t('testSuccess')}${latencyInfo}`, { id: toastId })
       } else {
-        toast.info(result.message)
+        toast.error(result.message || t('testFailed'), { id: toastId })
       }
     } catch {
+      toast.dismiss(toastId)
       // 错误已由 API 客户端处理
     }
   }

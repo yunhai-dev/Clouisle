@@ -84,17 +84,81 @@ class ModelManager:
 
     # ==================== 内部辅助方法 ====================
 
+    def _parse_model_identifier(
+        self, identifier: str
+    ) -> tuple[str | None, str | None, str | None]:
+        """
+        解析模型标识符
+
+        支持的格式:
+        - UUID: 数据库主键 (e.g., "550e8400-e29b-41d4-a716-446655440000")
+        - 句柄: provider/model_id (e.g., "openai/gpt-4o")
+
+        Args:
+            identifier: 模型标识符
+
+        Returns:
+            (uuid, provider, model_id) 元组，未匹配的字段为 None
+        """
+        # 尝试解析为 UUID
+        try:
+            uuid.UUID(identifier)
+            return (identifier, None, None)
+        except ValueError:
+            pass
+
+        # 尝试解析为 provider/model_id 句柄
+        if "/" in identifier:
+            parts = identifier.split("/", 1)
+            if len(parts) == 2:
+                provider, model_id = parts
+                return (None, provider, model_id)
+
+        # 不支持单独的 model_id，因为它不是唯一的
+        return (None, None, None)
+
     async def _get_model_config(
         self, model_id: str | None = None, model_type: ModelType = ModelType.CHAT
     ) -> Model:
-        """获取模型配置"""
+        """
+        获取模型配置
+
+        Args:
+            model_id: 模型标识符，支持以下格式：
+                - UUID: 数据库主键
+                - 句柄: "provider/model_id" 格式 (e.g., "openai/gpt-4o")
+                - None: 使用该类型的默认模型
+            model_type: 模型类型，仅在获取默认模型时使用
+
+        Returns:
+            Model: 模型配置对象
+
+        Raises:
+            ModelNotFoundError: 找不到模型或标识符格式无效
+            ModelDisabledError: 模型已禁用
+        """
+        model: Model | None = None
+
         if model_id:
-            model = await Model.filter(id=model_id).first()
-            if not model:
-                # 尝试按 model_id 字段查找
+            parsed_uuid, provider, parsed_model_id = self._parse_model_identifier(
+                model_id
+            )
+
+            if parsed_uuid:
+                # 按 UUID 查找
+                model = await Model.filter(id=parsed_uuid).first()
+            elif provider and parsed_model_id:
+                # 按 provider/model_id 句柄查找
                 model = await Model.filter(
-                    model_id=model_id, model_type=model_type
+                    provider=provider, model_id=parsed_model_id
                 ).first()
+            else:
+                # 无效的标识符格式
+                raise ModelNotFoundError(
+                    message=f"Invalid model identifier format: '{model_id}'. "
+                    f"Use UUID or 'provider/model_id' format (e.g., 'openai/gpt-4o')",
+                    model=model_id,
+                )
         else:
             # 获取该类型的默认模型
             model = await Model.filter(model_type=model_type, is_default=True).first()
@@ -106,7 +170,7 @@ class ModelManager:
 
         if not model:
             raise ModelNotFoundError(
-                message=f"No model found for type: {model_type}",
+                message=f"No model found for identifier: {model_id or model_type}",
                 model=model_id,
             )
 

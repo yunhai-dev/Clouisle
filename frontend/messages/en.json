@@ -494,7 +494,6 @@
     "advanced": "Advanced",
     "modelIdentity": "Model Identity",
     "apiConfig": "API Configuration",
-    "status": "Status",
     "contextConfig": "Context Configuration",
     "priceConfig": "Pricing",
     "inferenceParams": "Inference Parameters",

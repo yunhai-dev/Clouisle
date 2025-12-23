@@ -165,8 +165,8 @@ export const modelsApi = {
   /**
    * 测试模型连接（已有模型）
    */
-  testConnection: async (modelId: string): Promise<{ status: string; message: string }> => {
-    return api.post<{ status: string; message: string }>(`/models/${modelId}/test`)
+  testConnection: async (modelId: string): Promise<{ success: boolean; message: string; latency_ms?: number }> => {
+    return api.post<{ success: boolean; message: string; latency_ms?: number }>(`/models/${modelId}/test`)
   },
 
   /**

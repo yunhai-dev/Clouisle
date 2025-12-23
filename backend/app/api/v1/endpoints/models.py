@@ -9,6 +9,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
+from tortoise.expressions import Q
+
 from app.api import deps
 from app.models.model import Model, ModelProvider, ModelType, PROVIDER_DEFAULTS
 from app.models.user import User
@@ -31,31 +33,6 @@ from app.schemas.response import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-def model_to_response(model: Model) -> dict:
-    """Convert Model ORM object to response dict with has_api_key"""
-    return {
-        "id": model.id,
-        "name": model.name,
-        "provider": model.provider,
-        "model_id": model.model_id,
-        "model_type": model.model_type,
-        "base_url": model.base_url,
-        "has_api_key": bool(model.api_key),
-        "context_length": model.context_length,
-        "max_output_tokens": model.max_output_tokens,
-        "input_price": model.input_price,
-        "output_price": model.output_price,
-        "default_params": model.default_params,
-        "capabilities": model.capabilities,
-        "config": model.config,
-        "is_enabled": model.is_enabled,
-        "is_default": model.is_default,
-        "sort_order": model.sort_order,
-        "created_at": model.created_at,
-        "updated_at": model.updated_at,
-    }
 
 
 @router.get("/providers", response_model=Response[list[ProviderInfo]])
@@ -134,9 +111,7 @@ async def list_models(
     if is_enabled is not None:
         query = query.filter(is_enabled=is_enabled)
     if search:
-        query = query.filter(name__icontains=search) | query.filter(
-            model_id__icontains=search
-        )
+        query = query.filter(Q(name__icontains=search) | Q(model_id__icontains=search))
 
     total = await query.count()
     models = (
@@ -145,7 +120,7 @@ async def list_models(
 
     return success(
         data={
-            "items": [model_to_response(m) for m in models],
+            "items": [ModelResponse.model_validate(m) for m in models],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -203,7 +178,7 @@ async def create_model(
     model_data["model_type"] = model_in.model_type.value
 
     model = await Model.create(**model_data)
-    return success(data=model_to_response(model), msg_key="model_created")
+    return success(data=ModelResponse.model_validate(model), msg_key="model_created")
 
 
 @router.get("/{model_id}", response_model=Response[ModelResponse])
@@ -223,7 +198,7 @@ async def get_model(
             status_code=404,
         )
 
-    return success(data=model_to_response(model))
+    return success(data=ModelResponse.model_validate(model))
 
 
 @router.put("/{model_id}", response_model=Response[ModelResponse])
@@ -264,7 +239,7 @@ async def update_model(
 
     # Refresh to get updated timestamps
     model = await Model.get(id=model_id)
-    return success(data=model_to_response(model), msg_key="model_updated")
+    return success(data=ModelResponse.model_validate(model), msg_key="model_updated")
 
 
 @router.delete("/{model_id}", response_model=Response[ModelResponse])
@@ -284,13 +259,13 @@ async def delete_model(
             status_code=404,
         )
 
-    response_data = model_to_response(model)
+    response_data = ModelResponse.model_validate(model)
     await model.delete()
 
     return success(data=response_data, msg_key="model_deleted")
 
 
-@router.post("/{model_id}/test", response_model=Response[dict])
+@router.post("/{model_id}/test", response_model=Response[ModelTestResponse])
 async def test_model_connection(
     model_id: UUID,
     current_user: User = Depends(deps.PermissionChecker("model:update")),
@@ -298,8 +273,6 @@ async def test_model_connection(
     """
     Test model connection by making a simple API call.
     Requires model:update permission.
-
-    TODO: Implement actual connection test logic for each provider.
     """
     model = await Model.filter(id=model_id).first()
     if not model:
@@ -315,15 +288,76 @@ async def test_model_connection(
             msg_key="model_api_key_required",
         )
 
-    # TODO: Implement actual connection test for each provider
-    # For now, just return a placeholder response
-    return success(
-        data={
-            "status": "pending",
-            "message": "Connection test not yet implemented",
-        },
-        msg_key="model_test_pending",
-    )
+    # 复用 test_model_config 的测试逻辑
+    start_time = time.time()
+    provider = ModelProvider(model.provider)
+    model_type = ModelType(model.model_type)
+    config = model.config or {}
+
+    try:
+        if model_type == ModelType.CHAT:
+            await _test_chat_model(
+                provider, model.model_id, model.api_key, model.base_url, config
+            )
+        elif model_type == ModelType.EMBEDDING:
+            await _test_embedding_model(
+                provider, model.model_id, model.api_key, model.base_url, config
+            )
+        elif model_type == ModelType.TEXT_TO_IMAGE:
+            _validate_api_key(provider, model.api_key)
+        elif model_type in [ModelType.TTS, ModelType.STT]:
+            _validate_api_key(provider, model.api_key)
+        else:
+            raise BusinessError(
+                code=ResponseCode.VALIDATION_ERROR,
+                msg_key="model_type_not_supported",
+            )
+
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        return success(
+            data=ModelTestResponse(
+                success=True,
+                message="Connection successful",
+                latency_ms=latency_ms,
+            ),
+            msg_key="model_test_success",
+        )
+
+    except BusinessError:
+        raise
+    except Exception as e:
+        logger.exception(f"Model test failed: {e}")
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        error_msg = str(e)
+        if "401" in error_msg or "Unauthorized" in error_msg.lower():
+            error_msg = "Invalid API key"
+        elif "404" in error_msg or "not found" in error_msg.lower():
+            error_msg = "Model not found or not accessible"
+        elif "429" in error_msg or "rate limit" in error_msg.lower():
+            error_msg = "Rate limit exceeded, but API key is valid"
+            return success(
+                data=ModelTestResponse(
+                    success=True,
+                    message=error_msg,
+                    latency_ms=latency_ms,
+                ),
+                msg_key="model_test_success",
+            )
+        elif "timeout" in error_msg.lower():
+            error_msg = "Connection timeout"
+        elif "connection" in error_msg.lower():
+            error_msg = "Connection failed, check base URL"
+
+        return success(
+            data=ModelTestResponse(
+                success=False,
+                message=error_msg,
+                latency_ms=latency_ms,
+            ),
+            msg_key="model_test_failed",
+        )
 
 
 @router.post("/{model_id}/set-default", response_model=Response[ModelResponse])
@@ -343,16 +377,20 @@ async def set_default_model(
             status_code=404,
         )
 
-    # Unset other defaults of same type
-    await Model.filter(model_type=model.model_type, is_default=True).update(
-        is_default=False
+    # Unset other defaults of same type (exclude current model)
+    await (
+        Model.filter(model_type=model.model_type, is_default=True)
+        .exclude(id=model_id)
+        .update(is_default=False)
     )
 
     # Set this model as default
     model.is_default = True
     await model.save()
 
-    return success(data=model_to_response(model), msg_key="model_set_default")
+    return success(
+        data=ModelResponse.model_validate(model), msg_key="model_set_default"
+    )
 
 
 @router.post("/test", response_model=Response[ModelTestResponse])
