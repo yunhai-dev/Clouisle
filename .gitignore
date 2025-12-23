@@ -58,3 +58,6 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Uploads
+backend/uploads/
+
