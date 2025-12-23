@@ -39,11 +39,11 @@ class ToolInfo(BaseModel):
 
     def to_openai_schema(self) -> dict:
         """转换为 OpenAI 工具格式"""
-        properties = {}
-        required = []
+        properties: dict[str, dict[str, str | list[str]]] = {}
+        required: list[str] = []
 
         for param in self.parameters:
-            prop = {"type": param.type}
+            prop: dict[str, str | list[str]] = {"type": param.type}
             if param.description:
                 prop["description"] = param.description
             if param.enum:

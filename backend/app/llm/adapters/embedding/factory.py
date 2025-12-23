@@ -3,27 +3,40 @@ Embedding 模型工厂 - 使用 LangChain
 """
 
 import logging
+from typing import Any, Protocol
 
 from langchain_core.embeddings import Embeddings
+from pydantic import SecretStr
 
 from app.models.model import Model, ModelProvider
+
+
+class ModelConfig(Protocol):
+    """模型配置协议，用于类型检查"""
+
+    provider: str | ModelProvider
+    model_id: str
+    api_key: str | None
+    base_url: str | None
+    config: dict[str, Any] | None
+
 
 logger = logging.getLogger(__name__)
 
 
-def create_embedding_model(model_config: Model) -> Embeddings:
+def create_embedding_model(model_config: Model | ModelConfig) -> Embeddings:
     """
     根据模型配置创建 LangChain Embedding 模型实例
 
     Args:
-        model_config: 数据库中的模型配置
+        model_config: 数据库中的模型配置或临时配置对象
 
     Returns:
         Embeddings: LangChain Embedding 模型实例
     """
     provider = model_config.provider
     model_id = model_config.model_id
-    api_key = model_config.api_key
+    api_key = SecretStr(model_config.api_key) if model_config.api_key else None
     base_url = model_config.base_url
 
     if provider == ModelProvider.OPENAI:
@@ -60,7 +73,7 @@ def create_embedding_model(model_config: Model) -> Embeddings:
         from langchain_openai import OpenAIEmbeddings
 
         # 这些供应商一般兼容 OpenAI API
-        provider_base_urls = {
+        provider_base_urls: dict[ModelProvider, str] = {
             ModelProvider.DEEPSEEK: "https://api.deepseek.com/v1",
             ModelProvider.MOONSHOT: "https://api.moonshot.cn/v1",
             ModelProvider.ZHIPU: "https://open.bigmodel.cn/api/paas/v4",
@@ -69,11 +82,15 @@ def create_embedding_model(model_config: Model) -> Embeddings:
             ModelProvider.MINIMAX: "https://api.minimax.chat/v1",
             ModelProvider.OLLAMA: "http://localhost:11434/v1",
         }
-        final_base_url = base_url or provider_base_urls.get(provider)
+        # 获取 provider 的 base_url
+        provider_enum = (
+            ModelProvider(provider) if isinstance(provider, str) else provider
+        )
+        final_base_url = base_url or provider_base_urls.get(provider_enum)
 
         return OpenAIEmbeddings(
             model=model_id,
-            api_key=api_key or "ollama",
+            api_key=api_key or SecretStr("ollama"),
             base_url=final_base_url,
         )
 

@@ -54,7 +54,7 @@ class ModelType(str, Enum):
 
 
 # Provider default configurations (base URLs, etc.)
-PROVIDER_DEFAULTS = {
+PROVIDER_DEFAULTS: dict[ModelProvider, dict[str, str | None]] = {
     ModelProvider.OPENAI: {
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
@@ -197,15 +197,15 @@ class Model(models.Model):
     )
 
     # JSON fields for flexible configuration
-    default_params = fields.JSONField(
+    default_params: dict | None = fields.JSONField(
         null=True,
         description="Default inference parameters (temperature, top_p, etc.)",
     )
-    capabilities = fields.JSONField(
+    capabilities: dict | None = fields.JSONField(
         null=True,
         description="Model capabilities (vision, function_call, streaming, etc.)",
     )
-    config = fields.JSONField(
+    config: dict | None = fields.JSONField(
         null=True,
         description="Additional configuration (api_version, deployment_name, etc.)",
     )
@@ -242,6 +242,10 @@ class Model(models.Model):
             return self.base_url
         try:
             provider_enum = ModelProvider(self.provider)
-            return PROVIDER_DEFAULTS.get(provider_enum, {}).get("base_url")
+            defaults = PROVIDER_DEFAULTS.get(provider_enum)
+            if defaults:
+                base_url = defaults.get("base_url")
+                return base_url if isinstance(base_url, str) else None
+            return None
         except ValueError:
             return None

@@ -12,7 +12,12 @@ from fastapi import APIRouter, Depends, Query
 from tortoise.expressions import Q
 
 from app.api import deps
-from app.models.model import Model, ModelProvider, ModelType, PROVIDER_DEFAULTS
+from app.models.model import (
+    Model,
+    ModelProvider as OrmModelProvider,
+    ModelType as OrmModelType,
+    PROVIDER_DEFAULTS,
+)
 from app.models.user import User
 from app.schemas.model import (
     ModelCreate,
@@ -22,6 +27,8 @@ from app.schemas.model import (
     ProviderInfo,
     ModelTestRequest,
     ModelTestResponse,
+    ModelProvider,
+    ModelType,
 )
 from app.schemas.response import (
     Response,
@@ -42,16 +49,32 @@ async def get_providers() -> Any:
     No authentication required.
     """
     providers = []
-    for provider_enum in ModelProvider:
-        defaults = PROVIDER_DEFAULTS.get(provider_enum, {})
-        providers.append(
-            {
-                "code": provider_enum.value,
-                "name": defaults.get("name", provider_enum.value),
-                "base_url": defaults.get("base_url"),
-                "icon": defaults.get("icon", provider_enum.value),
-            }
-        )
+    for provider_enum in OrmModelProvider:
+        defaults = PROVIDER_DEFAULTS.get(provider_enum)
+        if defaults:
+            name_val = defaults.get("name")
+            name = name_val if isinstance(name_val, str) else provider_enum.value
+            base_url_val = defaults.get("base_url")
+            base_url = base_url_val if isinstance(base_url_val, str) else None
+            icon_val = defaults.get("icon")
+            icon = icon_val if isinstance(icon_val, str) else provider_enum.value
+            providers.append(
+                {
+                    "code": provider_enum.value,
+                    "name": name,
+                    "base_url": base_url,
+                    "icon": icon,
+                }
+            )
+        else:
+            providers.append(
+                {
+                    "code": provider_enum.value,
+                    "name": provider_enum.value,
+                    "base_url": None,
+                    "icon": provider_enum.value,
+                }
+            )
     return success(data=providers)
 
 
@@ -64,16 +87,16 @@ async def get_model_types() -> Any:
     """
     # 仅返回已实现适配器的模型类型
     types = [
-        {"code": ModelType.CHAT.value, "name": "Chat", "description": "对话模型"},
+        {"code": OrmModelType.CHAT.value, "name": "Chat", "description": "对话模型"},
         {
-            "code": ModelType.EMBEDDING.value,
+            "code": OrmModelType.EMBEDDING.value,
             "name": "Embedding",
             "description": "嵌入模型",
         },
-        {"code": ModelType.TTS.value, "name": "TTS", "description": "语音合成"},
-        {"code": ModelType.STT.value, "name": "STT", "description": "语音识别"},
+        {"code": OrmModelType.TTS.value, "name": "TTS", "description": "语音合成"},
+        {"code": OrmModelType.STT.value, "name": "STT", "description": "语音识别"},
         {
-            "code": ModelType.TEXT_TO_IMAGE.value,
+            "code": OrmModelType.TEXT_TO_IMAGE.value,
             "name": "Text to Image",
             "description": "文生图",
         },

@@ -75,7 +75,9 @@ class OpenAISTTAdapter(BaseSTTAdapter):
         if request.prompt:
             data["prompt"] = request.prompt
         if request.timestamp_granularities:
-            data["timestamp_granularities[]"] = request.timestamp_granularities
+            data["timestamp_granularities[]"] = ",".join(
+                request.timestamp_granularities
+            )
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",

@@ -182,9 +182,11 @@ class ModelManager:
 
         return model
 
-    def _convert_messages(self, messages: list[Message]) -> list:
+    def _convert_messages(
+        self, messages: list[Message]
+    ) -> list[SystemMessage | HumanMessage | AIMessage | ToolMessage]:
         """将内部消息格式转换为 LangChain 消息"""
-        lc_messages = []
+        lc_messages: list[SystemMessage | HumanMessage | AIMessage | ToolMessage] = []
         for msg in messages:
             content = msg.content
             if isinstance(content, list):
@@ -231,13 +233,11 @@ class ModelManager:
         if response.tool_calls:
             tool_calls = [
                 ToolCall(
-                    id=tc.get("id", str(uuid.uuid4())),
+                    id=tc.get("id") or str(uuid.uuid4()),
                     type="function",
                     function=FunctionCall(
                         name=tc.get("name", ""),
-                        arguments=tc.get("args", "{}")
-                        if isinstance(tc.get("args"), str)
-                        else str(tc.get("args", {})),
+                        arguments=str(tc.get("args", "{}")),
                     ),
                 )
                 for tc in response.tool_calls
@@ -329,19 +329,22 @@ class ModelManager:
             ChatResponse: 响应对象
         """
         # 转换 dict 为 Message
-        messages = [Message(**m) if isinstance(m, dict) else m for m in messages]
+        converted_messages: list[Message] = [
+            Message(**m) if isinstance(m, dict) else m for m in messages
+        ]
 
         model_config = await self._get_model_config(model_id, ModelType.CHAT)
         chat_model = create_chat_model(model_config)
 
-        lc_messages = self._convert_messages(messages)
+        lc_messages = self._convert_messages(converted_messages)
         lc_tools = self._convert_tools(tools)
 
         try:
+            model_to_invoke: BaseChatModel = chat_model
             if lc_tools:
-                chat_model = chat_model.bind_tools(lc_tools)
+                model_to_invoke = chat_model.bind_tools(lc_tools)  # type: ignore[assignment]
 
-            response = await chat_model.ainvoke(lc_messages, **kwargs)
+            response = await model_to_invoke.ainvoke(lc_messages, **kwargs)
             return self._parse_response(response, model_config.model_id)
         except Exception as e:
             logger.exception(f"Chat error: {e}")
@@ -364,12 +367,14 @@ class ModelManager:
         Yields:
             ChatStreamChunk: 流式响应块
         """
-        messages = [Message(**m) if isinstance(m, dict) else m for m in messages]
+        converted_messages: list[Message] = [
+            Message(**m) if isinstance(m, dict) else m for m in messages
+        ]
 
         model_config = await self._get_model_config(model_id, ModelType.CHAT)
         chat_model = create_chat_model(model_config)
 
-        lc_messages = self._convert_messages(messages)
+        lc_messages = self._convert_messages(converted_messages)
 
         try:
             response_id = str(uuid.uuid4())

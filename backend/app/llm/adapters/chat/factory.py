@@ -3,27 +3,41 @@ Chat 模型工厂 - 使用 LangChain
 """
 
 import logging
+from typing import Any, Protocol
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from pydantic import SecretStr
 
 from app.models.model import Model, ModelProvider
+
+
+class ModelConfig(Protocol):
+    """模型配置协议，用于类型检查"""
+
+    provider: str | ModelProvider
+    model_id: str
+    api_key: str | None
+    base_url: str | None
+    default_params: dict[str, Any] | None
+    config: dict[str, Any] | None
+
 
 logger = logging.getLogger(__name__)
 
 
-def create_chat_model(model_config: Model) -> BaseChatModel:
+def create_chat_model(model_config: Model | ModelConfig) -> BaseChatModel:
     """
     根据模型配置创建 LangChain Chat 模型实例
 
     Args:
-        model_config: 数据库中的模型配置
+        model_config: 数据库中的模型配置或临时配置对象
 
     Returns:
         BaseChatModel: LangChain Chat 模型实例
     """
     provider = model_config.provider
     model_id = model_config.model_id
-    api_key = model_config.api_key
+    api_key = SecretStr(model_config.api_key) if model_config.api_key else None
     base_url = model_config.base_url
 
     # 从 default_params 获取默认参数
@@ -33,7 +47,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
 
     # 从 config 获取额外配置
     config = model_config.config or {}
-    max_tokens = config.get("max_tokens")
+    max_output = config.get("max_tokens")
     timeout = config.get("timeout", 60)
 
     if provider == ModelProvider.OPENAI:
@@ -45,21 +59,24 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url,
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
     elif provider == ModelProvider.ANTHROPIC:
         from langchain_anthropic import ChatAnthropic
 
-        return ChatAnthropic(
+        if not api_key:
+            raise ValueError("Anthropic requires api_key")
+
+        return ChatAnthropic(  # type: ignore[call-arg]
             model=model_id,
-            api_key=api_key,
-            base_url=base_url,
+            anthropic_api_key=api_key,
+            anthropic_api_url=base_url,
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens or 4096,  # Anthropic 需要指定 max_tokens
-            timeout=timeout,
+            max_tokens=max_output or 4096,  # Anthropic 需要指定 max_tokens
+            default_request_timeout=timeout,
         )
 
     elif provider == ModelProvider.AZURE_OPENAI:
@@ -73,7 +90,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             api_version=azure_config.get("api_version", "2024-02-01"),
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -86,7 +103,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url or "https://api.deepseek.com/v1",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -99,7 +116,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url or "https://api.moonshot.cn/v1",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -112,7 +129,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url or "https://open.bigmodel.cn/api/paas/v4",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -125,7 +142,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -138,7 +155,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url or "https://api.baichuan-ai.com/v1",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -151,7 +168,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url or "https://api.minimax.chat/v1",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -160,11 +177,11 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
 
         return ChatOpenAI(
             model=model_id,
-            api_key=api_key or "ollama",  # Ollama 不需要 API key
+            api_key=api_key or SecretStr("ollama"),  # Ollama 不需要 API key
             base_url=base_url or "http://localhost:11434/v1",
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
@@ -181,7 +198,7 @@ def create_chat_model(model_config: Model) -> BaseChatModel:
             base_url=base_url,
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_output,
             timeout=timeout,
         )
 
