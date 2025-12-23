@@ -75,6 +75,12 @@ frontend/
 - TooltipTrigger、DropdownMenuTrigger 等需要使用 `render` prop 渲染自定义元素
 - **禁止使用原生 `confirm()`**，必须使用 shadcn 的 `AlertDialog` 组件
 - **禁止使用原生 `title` 属性作为提示**，必须使用 shadcn 的 `Tooltip` 组件
+- **Select 组件在 Dialog/Modal 中使用时**，必须添加 `alignItemWithTrigger={false}` 属性，否则下拉框会遮盖触发器：
+  ```tsx
+  <SelectContent side="bottom" alignItemWithTrigger={false}>
+    {/* items */}
+  </SelectContent>
+  ```
 
 **Hydration 处理**：
 - 依赖 localStorage 的状态需要使用 `mounted` 状态避免服务端/客户端不匹配

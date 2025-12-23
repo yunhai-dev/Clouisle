@@ -485,6 +485,47 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Team ownership transferred successfully",
         "zh": "团队所有权转让成功",
     },
+    # Model messages
+    "model_created": {
+        "en": "Model created successfully",
+        "zh": "模型创建成功",
+    },
+    "model_updated": {
+        "en": "Model updated successfully",
+        "zh": "模型更新成功",
+    },
+    "model_deleted": {
+        "en": "Model deleted successfully",
+        "zh": "模型删除成功",
+    },
+    "model_not_found": {
+        "en": "Model not found",
+        "zh": "模型未找到",
+    },
+    "model_already_exists": {
+        "en": "Model with this provider and model ID already exists",
+        "zh": "该供应商的模型 ID 已存在",
+    },
+    "model_api_key_required": {
+        "en": "API key is required to test connection",
+        "zh": "测试连接需要 API Key",
+    },
+    "model_test_pending": {
+        "en": "Connection test pending implementation",
+        "zh": "连接测试功能待实现",
+    },
+    "model_test_success": {
+        "en": "Connection test successful",
+        "zh": "连接测试成功",
+    },
+    "model_test_failed": {
+        "en": "Connection test failed: {error}",
+        "zh": "连接测试失败：{error}",
+    },
+    "model_set_default": {
+        "en": "Model set as default successfully",
+        "zh": "已设为默认模型",
+    },
 }
 
 

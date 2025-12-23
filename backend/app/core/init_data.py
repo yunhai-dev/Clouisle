@@ -70,6 +70,11 @@ async def init_db():
             "scope": "settings",
             "description": "Update site settings",
         },
+        # Model permissions
+        {"code": "model:read", "scope": "model", "description": "Read model configurations"},
+        {"code": "model:create", "scope": "model", "description": "Create model configurations"},
+        {"code": "model:update", "scope": "model", "description": "Update model configurations"},
+        {"code": "model:delete", "scope": "model", "description": "Delete model configurations"},
         # System wildcard permission
         {"code": "*", "scope": "system", "description": "All permissions (superuser)"},
     ]

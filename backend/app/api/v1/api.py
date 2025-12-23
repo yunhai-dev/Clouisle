@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     teams,
     site_settings,
     upload,
+    models,
 )
 
 api_router = APIRouter()
@@ -22,3 +23,4 @@ api_router.include_router(
     site_settings.router, prefix="/site-settings", tags=["site-settings"]
 )
 api_router.include_router(upload.router, prefix="/upload", tags=["upload"])
+api_router.include_router(models.router, prefix="/models", tags=["models"])

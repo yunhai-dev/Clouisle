@@ -17,6 +17,7 @@ import {
   ChevronUp,
   UsersRound,
   Globe,
+  Bot,
 } from 'lucide-react'
 import { authApi, type User } from '@/lib/api'
 import { useSiteSettings } from '@/contexts/site-settings-context'
@@ -124,6 +125,11 @@ export function AppSidebar({ variant = 'inset', collapsible = 'icon', side = 'le
       title: t('permissions'),
       url: '/permissions',
       icon: Key,
+    },
+    {
+      title: t('models'),
+      url: '/models',
+      icon: Bot,
     },
   ]
 
