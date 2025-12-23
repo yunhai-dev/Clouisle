@@ -168,8 +168,7 @@ export function UsersClient() {
       // 角色筛选
       if (roleFilter.size > 0) {
         const hasMatchingRole = user.roles.some(role => roleFilter.has(role.name))
-        const isSuperuser = user.is_superuser && roleFilter.has('Superadmin')
-        if (!hasMatchingRole && !isSuperuser) return false
+        if (!hasMatchingRole) return false
       }
       
       return true
@@ -196,12 +195,6 @@ export function UsersClient() {
   const roleOptions = React.useMemo(() => {
     const roleCounts = new Map<string, number>()
     
-    // 统计 Superadmin
-    const superadminCount = users.filter(u => u.is_superuser).length
-    if (superadminCount > 0) {
-      roleCounts.set('Superadmin', superadminCount)
-    }
-    
     // 统计各角色
     users.forEach(user => {
       user.roles.forEach(role => {
@@ -209,27 +202,12 @@ export function UsersClient() {
       })
     })
     
-    const options = []
-    
-    if (superadminCount > 0) {
-      options.push({
-        value: 'Superadmin',
-        label: 'Superadmin',
-        icon: <Shield className="h-4 w-4" />,
-        count: superadminCount,
-      })
-    }
-    
-    roles.forEach(role => {
-      options.push({
-        value: role.name,
-        label: role.name,
-        icon: <Shield className="h-4 w-4" />,
-        count: roleCounts.get(role.name) || 0,
-      })
-    })
-    
-    return options
+    return roles.map(role => ({
+      value: role.name,
+      label: role.name,
+      icon: <Shield className="h-4 w-4" />,
+      count: roleCounts.get(role.name) || 0,
+    }))
   }, [roles, users])
   
   // 计算分页信息
@@ -360,7 +338,6 @@ export function UsersClient() {
   
   // 获取用户主要角色
   const getPrimaryRole = (user: User) => {
-    if (user.is_superuser) return 'Superadmin'
     if (user.roles.length > 0) return user.roles[0].name
     return '-'
   }
