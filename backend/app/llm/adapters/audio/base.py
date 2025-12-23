@@ -1,6 +1,7 @@
 """
 音频适配器基类
 """
+
 from abc import ABC, abstractmethod
 
 from app.llm.types import TTSRequest, TTSResponse, STTRequest, STTResponse

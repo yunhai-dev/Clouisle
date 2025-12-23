@@ -1,6 +1,7 @@
 """
 视频生成类型定义
 """
+
 from pydantic import BaseModel, Field
 
 from .base import ImageContent, VideoContent, TaskStatus

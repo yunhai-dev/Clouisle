@@ -1,6 +1,7 @@
 """
 OpenAI Whisper STT 语音识别适配器
 """
+
 import logging
 import base64
 import httpx
@@ -103,7 +104,9 @@ class OpenAISTTAdapter(BaseSTTAdapter):
                     )
                 elif response.status_code == 400:
                     error_data = response.json()
-                    error_msg = error_data.get("error", {}).get("message", "Bad request")
+                    error_msg = error_data.get("error", {}).get(
+                        "message", "Bad request"
+                    )
                     raise InvalidRequestError(
                         message=error_msg,
                         provider="openai",

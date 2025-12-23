@@ -1,6 +1,7 @@
 """
 Chat 相关类型定义
 """
+
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -35,9 +36,13 @@ class Message(BaseModel):
     """聊天消息"""
 
     role: MessageRole = Field(..., description="消息角色")
-    content: str | list[ContentPart] | None = Field(default=None, description="消息内容")
+    content: str | list[ContentPart] | None = Field(
+        default=None, description="消息内容"
+    )
     name: str | None = Field(default=None, description="发送者名称")
-    tool_call_id: str | None = Field(default=None, description="工具调用 ID (role=tool 时)")
+    tool_call_id: str | None = Field(
+        default=None, description="工具调用 ID (role=tool 时)"
+    )
     tool_calls: list[ToolCall] | None = Field(default=None, description="工具调用列表")
 
 

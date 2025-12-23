@@ -1,6 +1,7 @@
 """
 音频类型定义 (TTS / STT)
 """
+
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -89,5 +90,7 @@ class STTResponse(BaseModel):
     segments: list[TranscriptionSegment] | None = Field(
         default=None, description="时间戳片段"
     )
-    words: list[TranscriptionWord] | None = Field(default=None, description="单词级时间戳")
+    words: list[TranscriptionWord] | None = Field(
+        default=None, description="单词级时间戳"
+    )
     model: str = Field(..., description="使用的模型")

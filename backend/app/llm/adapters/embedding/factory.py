@@ -1,6 +1,7 @@
 """
 Embedding 模型工厂 - 使用 LangChain
 """
+
 import logging
 
 from langchain_core.embeddings import Embeddings

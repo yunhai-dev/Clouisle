@@ -1,6 +1,7 @@
 """
 OpenAI DALL-E 图像生成适配器
 """
+
 import logging
 import httpx
 
@@ -32,7 +33,9 @@ class OpenAIImageAdapter(BaseImageAdapter):
         self.base_url = model_config.base_url or "https://api.openai.com/v1"
         self.model_id = model_config.model_id
 
-    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
+    async def generate(
+        self, request: ImageGenerationRequest
+    ) -> ImageGenerationResponse:
         """
         生成图像
 
@@ -90,8 +93,13 @@ class OpenAIImageAdapter(BaseImageAdapter):
                     )
                 elif response.status_code == 400:
                     error_data = response.json()
-                    error_msg = error_data.get("error", {}).get("message", "Bad request")
-                    if "content_policy" in error_msg.lower() or "safety" in error_msg.lower():
+                    error_msg = error_data.get("error", {}).get(
+                        "message", "Bad request"
+                    )
+                    if (
+                        "content_policy" in error_msg.lower()
+                        or "safety" in error_msg.lower()
+                    ):
                         raise ContentFilterError(
                             message=error_msg,
                             provider="openai",

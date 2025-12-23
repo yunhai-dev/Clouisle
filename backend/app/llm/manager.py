@@ -4,6 +4,7 @@
 提供统一的 LLM 调用接口，从数据库加载模型配置，
 根据模型类型分发到对应的适配器。
 """
+
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -91,7 +92,9 @@ class ModelManager:
             model = await Model.filter(id=model_id).first()
             if not model:
                 # 尝试按 model_id 字段查找
-                model = await Model.filter(model_id=model_id, model_type=model_type).first()
+                model = await Model.filter(
+                    model_id=model_id, model_type=model_type
+                ).first()
         else:
             # 获取该类型的默认模型
             model = await Model.filter(model_type=model_type, is_default=True).first()
@@ -122,9 +125,7 @@ class ModelManager:
             content = msg.content
             if isinstance(content, list):
                 # TODO: 处理多模态内容
-                content = " ".join(
-                    part.text for part in content if part.text
-                )
+                content = " ".join(part.text for part in content if part.text)
 
             if msg.role == MessageRole.SYSTEM:
                 lc_messages.append(SystemMessage(content=content or ""))
@@ -170,7 +171,8 @@ class ModelManager:
                     type="function",
                     function=FunctionCall(
                         name=tc.get("name", ""),
-                        arguments=tc.get("args", "{}") if isinstance(tc.get("args"), str)
+                        arguments=tc.get("args", "{}")
+                        if isinstance(tc.get("args"), str)
                         else str(tc.get("args", {})),
                     ),
                 )
@@ -204,7 +206,11 @@ class ModelManager:
         """统一处理异常"""
         error_msg = str(e).lower()
 
-        if "authentication" in error_msg or "api key" in error_msg or "invalid_api_key" in error_msg:
+        if (
+            "authentication" in error_msg
+            or "api key" in error_msg
+            or "invalid_api_key" in error_msg
+        ):
             return AuthenticationError(
                 message=str(e),
                 provider=provider,
@@ -216,7 +222,9 @@ class ModelManager:
                 provider=provider,
                 model=model,
             )
-        elif "context length" in error_msg or "token" in error_msg and "max" in error_msg:
+        elif (
+            "context length" in error_msg or "token" in error_msg and "max" in error_msg
+        ):
             return ContextLengthError(
                 message=str(e),
                 provider=provider,
@@ -257,10 +265,7 @@ class ModelManager:
             ChatResponse: 响应对象
         """
         # 转换 dict 为 Message
-        messages = [
-            Message(**m) if isinstance(m, dict) else m
-            for m in messages
-        ]
+        messages = [Message(**m) if isinstance(m, dict) else m for m in messages]
 
         model_config = await self._get_model_config(model_id, ModelType.CHAT)
         chat_model = create_chat_model(model_config)
@@ -295,10 +300,7 @@ class ModelManager:
         Yields:
             ChatStreamChunk: 流式响应块
         """
-        messages = [
-            Message(**m) if isinstance(m, dict) else m
-            for m in messages
-        ]
+        messages = [Message(**m) if isinstance(m, dict) else m for m in messages]
 
         model_config = await self._get_model_config(model_id, ModelType.CHAT)
         chat_model = create_chat_model(model_config)
@@ -313,7 +315,9 @@ class ModelManager:
                         id=response_id,
                         model=model_config.model_id,
                         delta=ChatStreamDelta(
-                            content=chunk.content if isinstance(chunk.content, str) else None,
+                            content=chunk.content
+                            if isinstance(chunk.content, str)
+                            else None,
                         ),
                         finish_reason=None,
                     )

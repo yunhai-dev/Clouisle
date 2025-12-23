@@ -88,7 +88,11 @@ async def get_model_types() -> Any:
     # 仅返回已实现适配器的模型类型
     types = [
         {"code": ModelType.CHAT.value, "name": "Chat", "description": "对话模型"},
-        {"code": ModelType.EMBEDDING.value, "name": "Embedding", "description": "嵌入模型"},
+        {
+            "code": ModelType.EMBEDDING.value,
+            "name": "Embedding",
+            "description": "嵌入模型",
+        },
         {"code": ModelType.TTS.value, "name": "TTS", "description": "语音合成"},
         {"code": ModelType.STT.value, "name": "STT", "description": "语音识别"},
         {
@@ -135,7 +139,9 @@ async def list_models(
         )
 
     total = await query.count()
-    models = await query.offset(skip).limit(page_size).order_by("sort_order", "-created_at")
+    models = (
+        await query.offset(skip).limit(page_size).order_by("sort_order", "-created_at")
+    )
 
     return success(
         data={
@@ -247,9 +253,11 @@ async def update_model(
 
     # If setting as default, unset other defaults of same type
     if update_data.get("is_default"):
-        await Model.filter(model_type=model.model_type, is_default=True).exclude(
-            id=model_id
-        ).update(is_default=False)
+        await (
+            Model.filter(model_type=model.model_type, is_default=True)
+            .exclude(id=model_id)
+            .update(is_default=False)
+        )
 
     await model.update_from_dict(update_data)
     await model.save()
@@ -363,9 +371,9 @@ async def test_model_config(
     api_key = test_request.api_key
     base_url = test_request.base_url
     config = test_request.config or {}
-    
+
     start_time = time.time()
-    
+
     try:
         if model_type == ModelType.CHAT:
             await _test_chat_model(provider, model_id, api_key, base_url, config)
@@ -382,9 +390,9 @@ async def test_model_config(
                 code=ResponseCode.VALIDATION_ERROR,
                 msg_key="model_type_not_supported",
             )
-        
+
         latency_ms = int((time.time() - start_time) * 1000)
-        
+
         return success(
             data=ModelTestResponse(
                 success=True,
@@ -393,13 +401,13 @@ async def test_model_config(
             ),
             msg_key="model_test_success",
         )
-        
+
     except BusinessError:
         raise
     except Exception as e:
         logger.exception(f"Model test failed: {e}")
         latency_ms = int((time.time() - start_time) * 1000)
-        
+
         # 解析错误信息
         error_msg = str(e)
         if "401" in error_msg or "Unauthorized" in error_msg.lower():
@@ -421,7 +429,7 @@ async def test_model_config(
             error_msg = "Connection timeout"
         elif "connection" in error_msg.lower():
             error_msg = "Connection failed, check base URL"
-        
+
         return success(
             data=ModelTestResponse(
                 success=False,
@@ -457,7 +465,7 @@ async def _test_chat_model(
 ) -> None:
     """Test chat model by making a simple completion request"""
     from langchain_core.messages import HumanMessage
-    
+
     # 构建临时配置
     class TempModel:
         def __init__(self):
@@ -467,15 +475,15 @@ async def _test_chat_model(
             self.base_url = base_url
             self.default_params = {}
             self.config = config
-    
+
     from app.llm.adapters.chat.factory import create_chat_model
-    
+
     chat_model = create_chat_model(TempModel())
-    
+
     # 发送一个简单的测试消息
     messages = [HumanMessage(content="Hi")]
     response = await chat_model.ainvoke(messages)
-    
+
     if not response.content:
         raise ValueError("Empty response from model")
 
@@ -488,7 +496,7 @@ async def _test_embedding_model(
     config: dict,
 ) -> None:
     """Test embedding model by embedding a simple text"""
-    
+
     class TempModel:
         def __init__(self):
             self.provider = provider
@@ -496,13 +504,13 @@ async def _test_embedding_model(
             self.api_key = api_key
             self.base_url = base_url
             self.config = config
-    
+
     from app.llm.adapters.embedding.factory import create_embedding_model
-    
+
     embedding_model = create_embedding_model(TempModel())
-    
+
     # 嵌入一个简单的测试文本
     result = await embedding_model.aembed_query("test")
-    
+
     if not result or len(result) == 0:
         raise ValueError("Empty embedding result")

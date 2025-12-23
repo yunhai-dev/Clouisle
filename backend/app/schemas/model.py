@@ -69,9 +69,13 @@ class ModelCreate(BaseModel):
     )
     model_type: ModelType = Field(..., description="Model type")
     base_url: Optional[str] = Field(None, max_length=512, description="Custom API URL")
-    api_key: str = Field(..., min_length=1, max_length=1024, description="API key (required)")
+    api_key: str = Field(
+        ..., min_length=1, max_length=1024, description="API key (required)"
+    )
     context_length: Optional[int] = Field(None, ge=1, description="Context length")
-    max_output_tokens: Optional[int] = Field(None, ge=1, description="Max output tokens")
+    max_output_tokens: Optional[int] = Field(
+        None, ge=1, description="Max output tokens"
+    )
     input_price: Optional[Decimal] = Field(
         None, ge=0, decimal_places=6, description="Input price per 1M tokens"
     )
@@ -159,11 +163,15 @@ class ModelTestRequest(BaseModel):
     """Schema for testing model configuration before creation"""
 
     provider: ModelProvider = Field(..., description="Provider identifier")
-    model_id: str = Field(..., min_length=1, max_length=100, description="Model identifier")
+    model_id: str = Field(
+        ..., min_length=1, max_length=100, description="Model identifier"
+    )
     model_type: ModelType = Field(..., description="Model type")
     base_url: Optional[str] = Field(None, max_length=512, description="Custom API URL")
     api_key: str = Field(..., min_length=1, max_length=1024, description="API key")
-    config: Optional[dict[str, Any]] = Field(None, description="Additional configuration")
+    config: Optional[dict[str, Any]] = Field(
+        None, description="Additional configuration"
+    )
 
 
 class ModelTestResponse(BaseModel):
@@ -171,4 +179,6 @@ class ModelTestResponse(BaseModel):
 
     success: bool = Field(..., description="Whether the test was successful")
     message: str = Field(..., description="Test result message")
-    latency_ms: Optional[int] = Field(None, description="Response latency in milliseconds")
+    latency_ms: Optional[int] = Field(
+        None, description="Response latency in milliseconds"
+    )

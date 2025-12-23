@@ -180,16 +180,20 @@ class Model(models.Model):
 
     # Model specifications
     context_length = fields.IntField(null=True, description="Maximum context length")
-    max_output_tokens = fields.IntField(
-        null=True, description="Maximum output tokens"
-    )
+    max_output_tokens = fields.IntField(null=True, description="Maximum output tokens")
 
     # Pricing (per million tokens)
     input_price = fields.DecimalField(
-        max_digits=10, decimal_places=6, null=True, description="Input price per 1M tokens"
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        description="Input price per 1M tokens",
     )
     output_price = fields.DecimalField(
-        max_digits=10, decimal_places=6, null=True, description="Output price per 1M tokens"
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        description="Output price per 1M tokens",
     )
 
     # JSON fields for flexible configuration
@@ -207,7 +211,9 @@ class Model(models.Model):
     )
 
     # Status
-    is_enabled = fields.BooleanField(default=True, description="Whether model is enabled")
+    is_enabled = fields.BooleanField(
+        default=True, description="Whether model is enabled"
+    )
     is_default = fields.BooleanField(
         default=False, description="Whether this is the default model for its type"
     )

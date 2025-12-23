@@ -1,6 +1,7 @@
 """
 基础类型定义
 """
+
 from enum import Enum
 from pydantic import BaseModel, Field
 

@@ -3,6 +3,7 @@
 
 提供统一的工具注册和管理功能。
 """
+
 import logging
 from typing import Any, Callable, Awaitable
 from pydantic import BaseModel, Field
@@ -14,7 +15,9 @@ class ToolParameter(BaseModel):
     """工具参数定义"""
 
     name: str = Field(..., description="参数名")
-    type: str = Field(..., description="参数类型 (string, integer, number, boolean, array, object)")
+    type: str = Field(
+        ..., description="参数类型 (string, integer, number, boolean, array, object)"
+    )
     description: str | None = Field(default=None, description="参数描述")
     required: bool = Field(default=False, description="是否必填")
     enum: list[str] | None = Field(default=None, description="枚举值")
@@ -26,7 +29,9 @@ class ToolInfo(BaseModel):
 
     name: str = Field(..., description="工具名称")
     description: str = Field(..., description="工具描述")
-    parameters: list[ToolParameter] = Field(default_factory=list, description="参数列表")
+    parameters: list[ToolParameter] = Field(
+        default_factory=list, description="参数列表"
+    )
     handler: Callable[..., Awaitable[Any]] | None = Field(default=None, exclude=True)
 
     class Config:
@@ -114,6 +119,7 @@ class ToolRegistry:
         Returns:
             装饰器函数
         """
+
         def decorator(func: Callable[..., Awaitable[Any]]) -> Callable:
             tool_info = ToolInfo(
                 name=name,
@@ -124,6 +130,7 @@ class ToolRegistry:
             self._tools[name] = tool_info
             logger.debug(f"Registered tool: {name}")
             return func
+
         return decorator
 
     def register_tool(self, tool_info: ToolInfo) -> None:

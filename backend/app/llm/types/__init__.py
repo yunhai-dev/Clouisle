@@ -1,6 +1,7 @@
 """
 LLM 类型定义
 """
+
 # Base types
 from .base import (
     MediaContent,

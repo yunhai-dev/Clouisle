@@ -1,6 +1,7 @@
 """
 OpenAI TTS 语音合成适配器
 """
+
 import logging
 import base64
 import httpx
@@ -87,7 +88,9 @@ class OpenAITTSAdapter(BaseTTSAdapter):
                     )
                 elif response.status_code == 400:
                     error_data = response.json()
-                    error_msg = error_data.get("error", {}).get("message", "Bad request")
+                    error_msg = error_data.get("error", {}).get(
+                        "message", "Bad request"
+                    )
                     raise InvalidRequestError(
                         message=error_msg,
                         provider="openai",
