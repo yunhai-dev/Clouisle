@@ -1,7 +1,7 @@
 """
 音频适配器
 """
-from app.models.model import Model, ModelProvider, ModelType
+from app.models.model import Model, ModelProvider
 from app.llm.errors import UnsupportedOperationError
 
 from .base import BaseTTSAdapter, BaseSTTAdapter

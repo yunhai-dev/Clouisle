@@ -463,3 +463,40 @@ bun dev
 ```bash
 docker-compose -f deploy/docker-compose.yml up -d
 ```
+
+---
+
+## ✅ Pre-commit Checklist
+
+**Before committing code, ensure all checks pass:**
+
+### Backend Checks
+```bash
+cd backend
+
+# Linting & Formatting (Ruff)
+uv run ruff check .
+uv run ruff format --check .
+
+# Static Type Checking (mypy)
+uv run mypy app/
+```
+
+### Frontend Checks
+```bash
+cd frontend
+
+# ESLint
+bun run lint
+```
+
+### Fix Commands
+```bash
+# Auto-fix ruff issues
+cd backend && uv run ruff check . --fix && uv run ruff format .
+
+# Auto-fix ESLint issues
+cd frontend && bun run lint --fix
+```
+
+**Important**: All checks must pass before pushing to the repository.
