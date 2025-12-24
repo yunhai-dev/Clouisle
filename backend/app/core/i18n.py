@@ -526,6 +526,100 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Model set as default successfully",
         "zh": "已设为默认模型",
     },
+    # Knowledge Base messages
+    "kb_created": {
+        "en": "Knowledge base created successfully",
+        "zh": "知识库创建成功",
+    },
+    "kb_updated": {
+        "en": "Knowledge base updated successfully",
+        "zh": "知识库更新成功",
+    },
+    "kb_deleted": {
+        "en": "Knowledge base deleted successfully",
+        "zh": "知识库删除成功",
+    },
+    "kb_not_found": {
+        "en": "Knowledge base not found",
+        "zh": "知识库未找到",
+    },
+    "kb_name_exists": {
+        "en": "Knowledge base with this name already exists in the team",
+        "zh": "该团队中已存在同名知识库",
+    },
+    # Document messages
+    "document_uploaded": {
+        "en": "Document uploaded successfully",
+        "zh": "文档上传成功",
+    },
+    "document_created": {
+        "en": "Document created successfully",
+        "zh": "文档创建成功",
+    },
+    "document_updated": {
+        "en": "Document updated successfully",
+        "zh": "文档更新成功",
+    },
+    "document_deleted": {
+        "en": "Document deleted successfully",
+        "zh": "文档删除成功",
+    },
+    "document_not_found": {
+        "en": "Document not found",
+        "zh": "文档未找到",
+    },
+    "document_reprocess_started": {
+        "en": "Document reprocessing started",
+        "zh": "文档重新处理已开始",
+    },
+    "invalid_document_type": {
+        "en": "Invalid document type. Supported: PDF, DOCX, TXT, MD, HTML, CSV, XLSX, JSON",
+        "zh": "不支持的文档类型。支持：PDF、DOCX、TXT、MD、HTML、CSV、XLSX、JSON",
+    },
+    "file_name_required": {
+        "en": "File name is required",
+        "zh": "文件名不能为空",
+    },
+    "source_url_required": {
+        "en": "Source URL is required",
+        "zh": "源URL不能为空",
+    },
+    "search_completed": {
+        "en": "Search completed",
+        "zh": "搜索完成",
+    },
+    "chunk_preview_generated": {
+        "en": "Chunk preview generated successfully",
+        "zh": "分块预览生成成功",
+    },
+    "chunk_preview_failed": {
+        "en": "Failed to generate chunk preview",
+        "zh": "生成分块预览失败",
+    },
+    "document_no_source": {
+        "en": "Document has no file or URL source",
+        "zh": "文档没有文件或URL来源",
+    },
+    "document_processing_started": {
+        "en": "Document processing started",
+        "zh": "文档处理已开始",
+    },
+    "document_processed": {
+        "en": "Document processed successfully",
+        "zh": "文档处理成功",
+    },
+    "document_process_failed": {
+        "en": "Failed to process document",
+        "zh": "文档处理失败",
+    },
+    "document_not_pending": {
+        "en": "Document is not in pending status",
+        "zh": "文档不是待处理状态",
+    },
+    "task_dispatch_failed": {
+        "en": "Failed to dispatch processing task. Please check if Redis is running.",
+        "zh": "任务调度失败。请检查 Redis 是否正常运行。",
+    },
 }
 
 

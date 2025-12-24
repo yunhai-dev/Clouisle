@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
 
 import { cn } from "@/lib/utils"
@@ -7,12 +8,15 @@ import { cn } from "@/lib/utils"
 function Switch({
   className,
   size = "default",
+  id,
   ...props
 }: SwitchPrimitive.Root.Props & {
   size?: "sm" | "default"
 }) {
+  const reactId = React.useId()
   return (
     <SwitchPrimitive.Root
+      id={id ?? reactId}
       data-slot="switch"
       data-size={size}
       className={cn(

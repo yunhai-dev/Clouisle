@@ -1,0 +1,235 @@
+"""
+Knowledge Base models for RAG functionality.
+Supports document management, chunking, and vector storage.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import TYPE_CHECKING
+
+from tortoise import fields, models
+
+if TYPE_CHECKING:
+    from app.models.user import Team, User
+
+
+class KnowledgeBaseStatus(str, Enum):
+    """Knowledge base status"""
+
+    ACTIVE = "active"
+    PROCESSING = "processing"
+    ERROR = "error"
+    ARCHIVED = "archived"
+
+
+class DocumentStatus(str, Enum):
+    """Document processing status"""
+
+    PENDING = "pending"  # Waiting to be processed
+    PROCESSING = "processing"  # Currently being processed
+    COMPLETED = "completed"  # Successfully processed
+    ERROR = "error"  # Processing failed
+
+
+class DocumentType(str, Enum):
+    """Supported document types"""
+
+    PDF = "pdf"
+    DOCX = "docx"
+    DOC = "doc"
+    TXT = "txt"
+    MD = "markdown"
+    HTML = "html"
+    CSV = "csv"
+    XLSX = "xlsx"
+    XLS = "xls"
+    JSON = "json"
+    URL = "url"  # Web page
+
+
+class KnowledgeBase(models.Model):
+    """
+    Knowledge Base entity.
+
+    A knowledge base is a collection of documents that can be queried
+    for RAG (Retrieval-Augmented Generation) applications.
+    """
+
+    id = fields.UUIDField(pk=True)
+
+    # Basic info
+    name = fields.CharField(max_length=100, description="Knowledge base name")
+    description = fields.CharField(max_length=500, null=True, description="Description")
+    icon = fields.CharField(max_length=50, null=True, description="Icon name or emoji")
+
+    # Team association for data isolation
+    team: fields.ForeignKeyRelation["Team"] = fields.ForeignKeyField(
+        "models.Team",
+        related_name="knowledge_bases",
+        on_delete=fields.CASCADE,
+        description="Team that owns this knowledge base",
+    )
+
+    # Creator
+    created_by: fields.ForeignKeyRelation["User"] | None = fields.ForeignKeyField(
+        "models.User",
+        related_name="created_knowledge_bases",
+        on_delete=fields.SET_NULL,
+        null=True,
+        description="User who created this knowledge base",
+    )
+
+    # Status
+    status = fields.CharField(
+        max_length=20,
+        default=KnowledgeBaseStatus.ACTIVE.value,
+        description="Knowledge base status",
+    )
+
+    # Embedding configuration
+    embedding_model_id = fields.UUIDField(
+        null=True, description="ID of the embedding model to use"
+    )
+
+    # Settings (JSON field for flexibility)
+    settings: dict | None = fields.JSONField(
+        null=True,
+        description="KB settings (chunk_size, chunk_overlap, etc.)",
+    )
+
+    # Statistics (cached for performance)
+    document_count = fields.IntField(default=0, description="Number of documents")
+    total_chunks = fields.IntField(default=0, description="Total number of chunks")
+    total_tokens = fields.IntField(default=0, description="Total tokens estimated")
+
+    # Timestamps
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    # Relations
+    documents: fields.ReverseRelation["Document"]
+
+    class Meta:
+        table = "knowledge_bases"
+        unique_together = (("team", "name"),)
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
+class Document(models.Model):
+    """
+    Document in a knowledge base.
+
+    Represents a single document that has been uploaded to a knowledge base.
+    Documents are processed into chunks for vector search.
+    """
+
+    id = fields.UUIDField(pk=True)
+
+    # Parent knowledge base
+    knowledge_base: fields.ForeignKeyRelation[KnowledgeBase] = fields.ForeignKeyField(
+        "models.KnowledgeBase",
+        related_name="documents",
+        on_delete=fields.CASCADE,
+    )
+
+    # Document info
+    name = fields.CharField(max_length=255, description="Document name/title")
+    doc_type = fields.CharField(max_length=20, description="Document type")
+    file_path = fields.CharField(
+        max_length=512, null=True, description="Path to stored file"
+    )
+    file_size = fields.IntField(null=True, description="File size in bytes")
+    source_url = fields.CharField(
+        max_length=1024, null=True, description="Source URL for web documents"
+    )
+
+    # Processing status
+    status = fields.CharField(
+        max_length=20,
+        default=DocumentStatus.PENDING.value,
+        description="Processing status",
+    )
+    error_message = fields.TextField(null=True, description="Error message if failed")
+
+    # Processing results
+    chunk_count = fields.IntField(default=0, description="Number of chunks")
+    token_count = fields.IntField(default=0, description="Estimated token count")
+
+    # Metadata (extracted from document)
+    metadata: dict | None = fields.JSONField(
+        null=True, description="Document metadata (author, title, etc.)"
+    )
+
+    # Uploader
+    uploaded_by: fields.ForeignKeyRelation["User"] | None = fields.ForeignKeyField(
+        "models.User",
+        related_name="uploaded_documents",
+        on_delete=fields.SET_NULL,
+        null=True,
+    )
+
+    # Timestamps
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+    processed_at = fields.DatetimeField(null=True, description="When processing completed")
+
+    # Relations
+    chunks: fields.ReverseRelation["DocumentChunk"]
+
+    class Meta:
+        table = "documents"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.doc_type})"
+
+
+class DocumentChunk(models.Model):
+    """
+    Document chunk for vector search.
+
+    Documents are split into chunks for embedding and retrieval.
+    Each chunk stores its content and vector embedding.
+    """
+
+    id = fields.UUIDField(pk=True)
+
+    # Parent document
+    document: fields.ForeignKeyRelation[Document] = fields.ForeignKeyField(
+        "models.Document",
+        related_name="chunks",
+        on_delete=fields.CASCADE,
+    )
+
+    # Chunk content
+    content = fields.TextField(description="Chunk text content")
+    chunk_index = fields.IntField(description="Order index within document")
+
+    # Token info
+    token_count = fields.IntField(default=0, description="Token count for this chunk")
+
+    # Metadata for retrieval context
+    metadata: dict | None = fields.JSONField(
+        null=True,
+        description="Chunk metadata (page number, section, etc.)",
+    )
+
+    # Vector embedding stored separately in pgvector
+    # The actual vector is stored in a separate table or using pgvector extension
+    embedding_id = fields.CharField(
+        max_length=100, null=True, description="Reference to vector storage"
+    )
+
+    # Timestamps
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "document_chunks"
+        ordering = ["document_id", "chunk_index"]
+
+    def __str__(self):
+        return f"Chunk {self.chunk_index} of {self.document_id}"

@@ -571,7 +571,15 @@ async def _test_embedding_model(
     embedding_model = create_embedding_model(TempModel())
 
     # 嵌入一个简单的测试文本
-    result = await embedding_model.aembed_query("test")
+    try:
+        result = await embedding_model.aembed_query("test")
+    except AttributeError as e:
+        if "'str' object has no attribute 'data'" in str(e):
+            raise ValueError(
+                "API response format is not compatible with OpenAI. "
+                "The endpoint may not support the embeddings API or returns a non-standard format."
+            )
+        raise
 
     if not result or len(result) == 0:
         raise ValueError("Empty embedding result")
