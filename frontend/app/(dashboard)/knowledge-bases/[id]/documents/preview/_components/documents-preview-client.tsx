@@ -241,7 +241,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
       }))
       
       // 检查返回的文档状态
-      if (result.status === 'error') {
+      if (result.status === 'failed') {
         toast.error(result.error_message || t('documentProcessFailed'))
       } else {
         // processing 或其他状态都表示任务已提交

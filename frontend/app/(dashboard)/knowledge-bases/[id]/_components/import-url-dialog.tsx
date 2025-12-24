@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field } from '@/components/ui/field'
+import { Field, FieldError } from '@/components/ui/field'
 
 interface ImportUrlDialogProps {
   open: boolean
@@ -94,7 +94,7 @@ export function ImportUrlDialog({
           
           <div className="grid gap-4 py-4">
             {/* URL */}
-            <Field error={fieldErrors.url}>
+            <Field>
               <Label htmlFor="url">{t('url')}</Label>
               <Input
                 id="url"
@@ -102,19 +102,23 @@ export function ImportUrlDialog({
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={t('urlPlaceholder')}
+                aria-invalid={!!fieldErrors.url}
               />
               <p className="text-xs text-muted-foreground">{t('urlHint')}</p>
+              {fieldErrors.url && <FieldError>{fieldErrors.url}</FieldError>}
             </Field>
             
             {/* 名称（可选） */}
-            <Field error={fieldErrors.name}>
+            <Field>
               <Label htmlFor="name">{t('documentName')} ({t('optional')})</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('documentNamePlaceholder')}
+                aria-invalid={!!fieldErrors.name}
               />
+              {fieldErrors.name && <FieldError>{fieldErrors.name}</FieldError>}
             </Field>
           </div>
           
