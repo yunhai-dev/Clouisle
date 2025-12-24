@@ -1,0 +1,364 @@
+'use client'
+
+import * as React from 'react'
+import { useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
+import {
+  ArrowLeft,
+  Search,
+  FileText,
+  Loader2,
+  Send,
+  Settings2,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  FileSearch,
+  Sparkles,
+} from 'lucide-react'
+import { knowledgeBasesApi, type KnowledgeBase, type SearchResult, type SearchMode } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/components/ui/toggle-group'
+import { cn } from '@/lib/utils'
+
+interface SearchTestClientProps {
+  knowledgeBaseId: string
+}
+
+export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
+  const t = useTranslations('knowledgeBases')
+  const router = useRouter()
+  
+  // 知识库信息
+  const [knowledgeBase, setKnowledgeBase] = React.useState<KnowledgeBase | null>(null)
+  const [isLoadingKb, setIsLoadingKb] = React.useState(true)
+  
+  // 搜索状态
+  const [query, setQuery] = React.useState('')
+  const [results, setResults] = React.useState<SearchResult[]>([])
+  const [isSearching, setIsSearching] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
+  
+  // 搜索参数
+  const [searchMode, setSearchMode] = React.useState<SearchMode>('hybrid')
+  const [topK, setTopK] = React.useState(5)
+  const [threshold, setThreshold] = React.useState(0)
+  const [showSettings, setShowSettings] = React.useState(false)
+  
+  // 展开的结果
+  const [expandedResults, setExpandedResults] = React.useState<Set<string>>(new Set())
+  
+  // 加载知识库信息
+  React.useEffect(() => {
+    const loadKnowledgeBase = async () => {
+      try {
+        const kb = await knowledgeBasesApi.getKnowledgeBase(knowledgeBaseId)
+        setKnowledgeBase(kb)
+      } catch {
+        router.push('/knowledge-bases')
+      } finally {
+        setIsLoadingKb(false)
+      }
+    }
+    loadKnowledgeBase()
+  }, [knowledgeBaseId, router])
+  
+  // 执行搜索
+  const handleSearch = async () => {
+    if (!query.trim()) return
+    
+    setIsSearching(true)
+    setHasSearched(true)
+    setExpandedResults(new Set()) // 重置展开状态
+    try {
+      const response = await knowledgeBasesApi.search(knowledgeBaseId, {
+        query: query.trim(),
+        search_mode: searchMode,
+        top_k: topK,
+        threshold,
+      })
+      setResults(response.results)
+      // 默认展开第一个结果
+      if (response.results.length > 0) {
+        setExpandedResults(new Set([response.results[0].chunk_id]))
+      }
+    } catch {
+      setResults([])
+    } finally {
+      setIsSearching(false)
+    }
+  }
+  
+  // 回车搜索
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSearch()
+    }
+  }
+  
+  // 切换结果展开
+  const toggleExpanded = (chunkId: string) => {
+    setExpandedResults(prev => {
+      const next = new Set(prev)
+      if (next.has(chunkId)) {
+        next.delete(chunkId)
+      } else {
+        next.add(chunkId)
+      }
+      return next
+    })
+  }
+  
+  // 格式化相似度分数
+  const formatScore = (score: number) => {
+    return (score * 100).toFixed(1) + '%'
+  }
+  
+  // 获取分数颜色
+  const getScoreColor = (score: number) => {
+    if (score >= 0.8) return 'text-emerald-500'
+    if (score >= 0.6) return 'text-blue-500'
+    if (score >= 0.4) return 'text-amber-500'
+    return 'text-muted-foreground'
+  }
+  
+  if (isLoadingKb) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+  
+  return (
+    <div className="flex h-full flex-col">
+      {/* 页头 */}
+      <div className="flex-none flex items-center gap-3 border-b px-4 py-3">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-8 w-8"
+          onClick={() => router.push(`/knowledge-bases/${knowledgeBaseId}`)}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h1 className="text-lg font-semibold">{t('searchTest')}</h1>
+          <p className="text-xs text-muted-foreground">
+            {knowledgeBase?.name}
+          </p>
+        </div>
+      </div>
+      
+      {/* 搜索结果区域 - 可滚动 */}
+      <div className="flex-1 min-h-0 overflow-auto p-4 pb-4">
+        {!hasSearched ? (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <Search className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <h3 className="text-base font-medium text-muted-foreground">
+              {t('searchTestHint')}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('searchTestDescription')}
+            </p>
+          </div>
+        ) : isSearching ? (
+          <div className="flex h-full flex-col items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">{t('searching')}</p>
+          </div>
+        ) : results.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <FileText className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <h3 className="text-base font-medium text-muted-foreground">
+              {t('noResults')}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('noResultsHint')}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-w-3xl mx-auto">
+            <p className="text-xs text-muted-foreground mb-3">
+              {t('searchResultsCount', { count: results.length })}
+            </p>
+            
+            {results.map((result, index) => {
+              const isExpanded = expandedResults.has(result.chunk_id)
+              return (
+                <Card 
+                  key={result.chunk_id} 
+                  className={cn(
+                    "overflow-hidden transition-all cursor-pointer hover:shadow-sm",
+                    isExpanded && "ring-1 ring-primary/20"
+                  )}
+                  onClick={() => toggleExpanded(result.chunk_id)}
+                >
+                  <CardHeader className="py-2 px-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <Badge variant="outline" className="shrink-0 text-[10px] h-5 px-1.5">
+                          #{index + 1}
+                        </Badge>
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-xs font-medium truncate">
+                          {result.document_name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge 
+                          variant="secondary" 
+                          className={cn("text-[10px] h-5 px-1.5", getScoreColor(result.score))}
+                        >
+                          {formatScore(result.score)}
+                        </Badge>
+                        {isExpanded ? (
+                          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </div>
+                    </div>
+                    {/* 折叠时显示预览 */}
+                    {!isExpanded && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1.5">
+                        {result.content}
+                      </p>
+                    )}
+                  </CardHeader>
+                  {/* 展开时显示完整内容 */}
+                  {isExpanded && (
+                    <CardContent className="pt-0 px-3 pb-3">
+                      <div className="rounded bg-muted/50 p-3">
+                        <p className="text-xs whitespace-pre-wrap leading-relaxed">
+                          {result.content}
+                        </p>
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      
+      {/* 底部搜索输入区 - 使用 sticky 固定在内容区底部 */}
+      <div className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-4 py-3">
+        <div className="max-w-3xl mx-auto space-y-2">
+          {/* 搜索输入框 + 设置按钮 */}
+          <div className="flex items-center gap-2">
+            {/* 搜索模式切换 */}
+            <ToggleGroup 
+              type="single" 
+              value={searchMode} 
+              onValueChange={(v: string) => v && setSearchMode(v as SearchMode)}
+              size="sm"
+              className="shrink-0"
+            >
+              <ToggleGroupItem value="hybrid" aria-label={t('hybridSearch')} className="gap-1 text-xs px-2 h-8">
+                <Zap className="h-3 w-3" />
+                <span className="hidden sm:inline">{t('hybridSearch')}</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="vector" aria-label={t('vectorSearch')} className="gap-1 text-xs px-2 h-8">
+                <Sparkles className="h-3 w-3" />
+                <span className="hidden sm:inline">{t('vectorSearch')}</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="fulltext" aria-label={t('fulltextSearch')} className="gap-1 text-xs px-2 h-8">
+                <FileSearch className="h-3 w-3" />
+                <span className="hidden sm:inline">{t('fulltextSearch')}</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
+            
+            {/* 搜索输入框 */}
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={t('searchPlaceholder')}
+                className="pl-8 pr-3 h-8 text-sm"
+                disabled={isSearching}
+              />
+            </div>
+            
+            {/* 高级设置按钮 */}
+            <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                  <Settings2 className="h-3.5 w-3.5" />
+                </Button>
+              </CollapsibleTrigger>
+            </Collapsible>
+            
+            {/* 搜索按钮 */}
+            <Button 
+              onClick={handleSearch} 
+              disabled={!query.trim() || isSearching}
+              size="sm"
+              className="h-8 px-3 shrink-0"
+            >
+              {isSearching ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
+          
+          {/* 高级设置面板 */}
+          <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+            <CollapsibleContent>
+              <div className="grid gap-3 sm:grid-cols-2 rounded-md border p-3 text-sm">
+                <div className="space-y-1">
+                  <Label htmlFor="topK" className="text-xs">
+                    {t('topK')}
+                  </Label>
+                  <Input
+                    id="topK"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={topK}
+                    onChange={(e) => setTopK(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+                    className="h-8"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <Label htmlFor="threshold" className="text-xs">
+                    {t('threshold')}
+                  </Label>
+                  <Input
+                    id="threshold"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={threshold}
+                    onChange={(e) => setThreshold(Math.min(1, Math.max(0, Number(e.target.value) || 0)))}
+                    className="h-8"
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      </div>
+    </div>
+  )
+}

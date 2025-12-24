@@ -78,6 +78,15 @@ class ResponseCode(IntEnum):
     # 速率限制错误 (5400-5499)
     RATE_LIMITED = 5400
 
+    # 知识库错误 (6000-6099)
+    KB_NOT_FOUND = 6000
+    KB_NAME_EXISTS = 6001
+    DOCUMENT_NOT_FOUND = 6002
+    INVALID_DOCUMENT_TYPE = 6003
+    DOCUMENT_PROCESSING_FAILED = 6004
+    CHUNK_NOT_FOUND = 6005
+    DOCUMENT_PROCESSING = 6006
+
 
 class BusinessError(Exception):
     """

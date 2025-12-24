@@ -1,0 +1,85 @@
+"""
+Celery application configuration for Clouisle backend.
+"""
+
+from celery import Celery
+from celery.signals import worker_process_init, worker_process_shutdown
+
+from app.core.config import settings
+
+# Redis URL for Celery broker and result backend
+REDIS_URL = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}"
+
+# Create Celery app
+celery_app = Celery(
+    "clouisle",
+    broker=f"{REDIS_URL}/0",
+    backend=f"{REDIS_URL}/1",
+    include=[
+        "app.tasks.knowledge_base",
+    ],
+)
+
+# Celery configuration
+celery_app.conf.update(
+    # Task settings
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone=settings.TIMEZONE,
+    enable_utc=True,
+    # Task execution settings
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    # Result settings
+    result_expires=3600 * 24,  # 24 hours
+    # Worker settings
+    worker_prefetch_multiplier=1,
+    worker_max_tasks_per_child=100,
+    # Retry settings
+    broker_connection_retry_on_startup=True,
+)
+
+# Optional: Configure task routes
+celery_app.conf.task_routes = {
+    "app.tasks.knowledge_base.*": {"queue": "default"},
+}
+
+
+# Initialize Tortoise ORM when worker process starts
+@worker_process_init.connect
+def init_tortoise(**kwargs):
+    """Initialize Tortoise ORM for each worker process."""
+    import asyncio
+    from tortoise import Tortoise
+
+    async def _init():
+        await Tortoise.init(
+            db_url=settings.DATABASE_URL
+            or f"postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}",
+            modules={"models": ["app.models"]},
+        )
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(_init())
+
+
+# Close Tortoise ORM when worker process shuts down
+@worker_process_shutdown.connect
+def close_tortoise(**kwargs):
+    """Close Tortoise ORM connections when worker shuts down."""
+    import asyncio
+    from tortoise import Tortoise
+
+    async def _close():
+        await Tortoise.close_connections()
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(_close())
+        else:
+            loop.run_until_complete(_close())
+    except Exception:
+        pass

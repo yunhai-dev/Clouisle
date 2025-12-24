@@ -229,48 +229,6 @@ async def send_email_to_users(
     )
 
 
-@router.put("/{user_id}", response_model=Response[UserSchema])
-async def update_user(
-    *,
-    user_id: UUID,
-    user_in: UserUpdate,
-    current_user: User = Depends(deps.PermissionChecker("user:update")),
-) -> Any:
-    """
-    Update a user.
-    """
-    user = await User.filter(id=user_id).first()
-    if not user:
-        raise BusinessError(
-            code=ResponseCode.USER_NOT_FOUND,
-            msg_key="user_with_id_not_exists",
-            status_code=404,
-        )
-
-    user_data = user_in.model_dump(exclude_unset=True)
-
-    if "password" in user_data:
-        password = user_data.pop("password")
-        user_data["hashed_password"] = security.get_password_hash(password)
-
-    if "roles" in user_data:
-        role_names = user_data.pop("roles")
-        roles = []
-        for role_name in role_names:
-            role = await Role.filter(name=role_name).first()
-            if role:
-                roles.append(role)
-        await user.roles.clear()
-        await user.roles.add(*roles)
-
-    await user.update_from_dict(user_data)
-    await user.save()
-
-    # Refresh to get updated relations
-    updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
-    return success(data=updated_user, msg_key="user_updated")
-
-
 @router.get("/me", response_model=Response[UserSchema])
 async def read_user_me(
     current_user: User = Depends(deps.get_current_active_user),
@@ -491,6 +449,48 @@ async def deactivate_user(
 
     updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
     return success(data=updated_user, msg_key="user_deactivated")
+
+
+@router.put("/{user_id}", response_model=Response[UserSchema])
+async def update_user(
+    *,
+    user_id: UUID,
+    user_in: UserUpdate,
+    current_user: User = Depends(deps.PermissionChecker("user:update")),
+) -> Any:
+    """
+    Update a user.
+    """
+    user = await User.filter(id=user_id).first()
+    if not user:
+        raise BusinessError(
+            code=ResponseCode.USER_NOT_FOUND,
+            msg_key="user_with_id_not_exists",
+            status_code=404,
+        )
+
+    user_data = user_in.model_dump(exclude_unset=True)
+
+    if "password" in user_data:
+        password = user_data.pop("password")
+        user_data["hashed_password"] = security.get_password_hash(password)
+
+    if "roles" in user_data:
+        role_names = user_data.pop("roles")
+        roles = []
+        for role_name in role_names:
+            role = await Role.filter(name=role_name).first()
+            if role:
+                roles.append(role)
+        await user.roles.clear()
+        await user.roles.add(*roles)
+
+    await user.update_from_dict(user_data)
+    await user.save()
+
+    # Refresh to get updated relations
+    updated_user = await User.get(id=user_id).prefetch_related("roles__permissions")
+    return success(data=updated_user, msg_key="user_updated")
 
 
 @router.delete("/{user_id}", response_model=Response[UserSchema])

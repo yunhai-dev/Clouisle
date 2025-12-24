@@ -17,6 +17,9 @@ from app.core.i18n import set_language, t, get_code_message
 from app.core.redis import close_redis
 from app.schemas.response import success, error, ResponseCode, BusinessError
 
+# Import celery app to ensure tasks are bound correctly when API sends tasks
+from app.core.celery import celery_app  # noqa: F401
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,

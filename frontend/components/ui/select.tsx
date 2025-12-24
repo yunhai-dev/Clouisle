@@ -32,12 +32,15 @@ function SelectTrigger({
   className,
   size = "default",
   children,
+  id,
   ...props
 }: SelectPrimitive.Trigger.Props & {
   size?: "sm" | "default"
 }) {
+  const reactId = React.useId()
   return (
     <SelectPrimitive.Trigger
+      id={id ?? reactId}
       data-slot="select-trigger"
       data-size={size}
       className={cn(
@@ -146,6 +149,25 @@ function SelectSeparator({
   )
 }
 
+function SelectEmpty({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="select-empty"
+      className={cn(
+        "text-muted-foreground py-6 text-center text-sm",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+}
+
 function SelectScrollUpButton({
   className,
   ...props
@@ -181,6 +203,7 @@ function SelectScrollDownButton({
 export {
   Select,
   SelectContent,
+  SelectEmpty,
   SelectGroup,
   SelectItem,
   SelectLabel,

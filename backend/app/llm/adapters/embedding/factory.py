@@ -88,10 +88,13 @@ def create_embedding_model(model_config: Model | ModelConfig) -> Embeddings:
         )
         final_base_url = base_url or provider_base_urls.get(provider_enum)
 
+        # 禁用 tokenization，因为某些 API 不支持 tokenized 输入
+        # check_embedding_ctx_length=False 防止 LangChain 对输入进行 tokenize
         return OpenAIEmbeddings(
             model=model_id,
             api_key=api_key or SecretStr("ollama"),
             base_url=final_base_url,
+            check_embedding_ctx_length=False,
         )
 
     else:

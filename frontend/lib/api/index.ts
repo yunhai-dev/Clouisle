@@ -6,3 +6,26 @@ export { teamsApi, type Team, type TeamWithMembers, type TeamMember, type UserTe
 export { siteSettingsApi, type SiteSetting, type SiteSettings, type PublicSiteSettings, type GeneralSettings, type SecuritySettings, type EmailSettings } from './site-settings'
 export { uploadApi, type UploadResult } from './upload'
 export { modelsApi, type Model, type ModelBrief, type ModelCreateInput, type ModelUpdateInput, type ModelQueryParams, type ProviderInfo, type ModelTypeInfo } from './models'
+export { 
+  knowledgeBasesApi, 
+  type KnowledgeBase, 
+  type KnowledgeBaseStats,
+  type KnowledgeBaseCreateInput, 
+  type KnowledgeBaseUpdateInput,
+  type KnowledgeBaseQueryParams,
+  type Document,
+  type DocumentChunk,
+  type DocumentStatus,
+  type DocumentType,
+  type DocumentQueryParams,
+  type ProcessInput,
+  type RechunkInput,
+  type SearchResult,
+  type SearchParams,
+  type SearchResponse,
+  type SearchMode,
+  type ChunkPreviewInput,
+  type ChunkPreviewItem,
+  type ChunkPreviewResponse,
+} from './knowledge-bases'
+

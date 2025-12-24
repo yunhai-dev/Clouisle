@@ -22,6 +22,7 @@ class ModelProvider(str, Enum):
     QWEN = "qwen"
     BAICHUAN = "baichuan"
     MINIMAX = "minimax"
+    VOLCENGINE = "volcengine"  # 火山引擎 (豆包)
 
     # Local deployment
     OLLAMA = "ollama"

@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
@@ -25,8 +26,9 @@ function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   )
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+function TooltipTrigger({ id, ...props }: TooltipPrimitive.Trigger.Props) {
+  const reactId = React.useId()
+  return <TooltipPrimitive.Trigger id={id ?? reactId} data-slot="tooltip-trigger" {...props} />
 }
 
 function TooltipContent({

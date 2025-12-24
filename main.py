@@ -1,25 +1,137 @@
 #!/usr/bin/env python
 """
-Clouisle Backend Startup Script
-Run this file from the project root to start the backend server.
+Clouisle Startup Script
+Run this file from the project root to start backend services.
+
+Usage:
+    python main.py server    - Start the backend API server
+    python main.py worker    - Start the Celery worker
+    python main.py beat      - Start the Celery beat scheduler
+    python main.py flower    - Start the Flower monitoring (if installed)
 """
 import os
 import sys
+import argparse
 import subprocess
 
-# Add backend directory to Python path
-backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend")
-sys.path.insert(0, backend_dir)
-os.chdir(backend_dir)
+# Project directories
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
 
-if __name__ == "__main__":
-    # Use uvicorn to run the app
+# Add backend directory to Python path
+sys.path.insert(0, BACKEND_DIR)
+
+
+def start_server(host: str = "127.0.0.1", port: int = 8000, reload: bool = True):
+    """Start the FastAPI backend server."""
+    os.chdir(BACKEND_DIR)
     import uvicorn
     
+    print(f"🚀 Starting Clouisle API server at http://{host}:{port}")
     uvicorn.run(
         "app.main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
-        reload_dirs=[backend_dir],
+        host=host,
+        port=port,
+        reload=reload,
+        reload_dirs=[BACKEND_DIR] if reload else None,
     )
+
+
+def start_worker(concurrency: int = 4, queues: str = "default"):
+    """Start the Celery worker."""
+    os.chdir(BACKEND_DIR)
+    
+    print(f"🔧 Starting Celery worker (concurrency={concurrency}, queues={queues})")
+    cmd = [
+        sys.executable, "-m", "celery",
+        "-A", "app.core.celery:celery_app",
+        "worker",
+        "--loglevel=info",
+        f"--concurrency={concurrency}",
+        f"--queues={queues}",
+    ]
+    subprocess.run(cmd)
+
+
+def start_beat():
+    """Start the Celery beat scheduler."""
+    os.chdir(BACKEND_DIR)
+    
+    print("⏰ Starting Celery beat scheduler")
+    cmd = [
+        sys.executable, "-m", "celery",
+        "-A", "app.core.celery:celery_app",
+        "beat",
+        "--loglevel=info",
+    ]
+    subprocess.run(cmd)
+
+
+def start_flower(port: int = 5555):
+    """Start the Flower monitoring dashboard."""
+    os.chdir(BACKEND_DIR)
+    
+    print(f"🌸 Starting Flower at http://localhost:{port}")
+    cmd = [
+        sys.executable, "-m", "celery",
+        "-A", "app.core.celery:celery_app",
+        "flower",
+        f"--port={port}",
+    ]
+    subprocess.run(cmd)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Clouisle - Start backend services",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py server                    Start API server (dev mode)
+  python main.py server --no-reload        Start API server (production mode)
+  python main.py server -p 8080            Start API server on port 8080
+  python main.py worker                    Start Celery worker
+  python main.py worker -c 8               Start worker with 8 processes
+  python main.py beat                      Start Celery beat scheduler
+  python main.py flower                    Start Flower monitoring
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+    
+    # Server command
+    server_parser = subparsers.add_parser("server", help="Start the API server")
+    server_parser.add_argument("-H", "--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
+    server_parser.add_argument("-p", "--port", type=int, default=8000, help="Port to bind (default: 8000)")
+    server_parser.add_argument("--no-reload", action="store_true", help="Disable auto-reload")
+    
+    # Worker command
+    worker_parser = subparsers.add_parser("worker", help="Start the Celery worker")
+    worker_parser.add_argument("-c", "--concurrency", type=int, default=4, help="Number of worker processes (default: 4)")
+    worker_parser.add_argument("-Q", "--queues", default="default", help="Queues to consume (default: default)")
+    
+    # Beat command
+    subparsers.add_parser("beat", help="Start the Celery beat scheduler")
+    
+    # Flower command
+    flower_parser = subparsers.add_parser("flower", help="Start Flower monitoring")
+    flower_parser.add_argument("-p", "--port", type=int, default=5555, help="Flower port (default: 5555)")
+    
+    args = parser.parse_args()
+    
+    if args.command is None:
+        parser.print_help()
+        sys.exit(1)
+    
+    if args.command == "server":
+        start_server(host=args.host, port=args.port, reload=not args.no_reload)
+    elif args.command == "worker":
+        start_worker(concurrency=args.concurrency, queues=args.queues)
+    elif args.command == "beat":
+        start_beat()
+    elif args.command == "flower":
+        start_flower(port=args.port)
+
+
+if __name__ == "__main__":
+    main()

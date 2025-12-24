@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     site_settings,
     upload,
     models,
+    knowledge_bases,
 )
 
 api_router = APIRouter()
@@ -24,3 +25,6 @@ api_router.include_router(
 )
 api_router.include_router(upload.router, prefix="/upload", tags=["upload"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
+api_router.include_router(
+    knowledge_bases.router, prefix="/knowledge-bases", tags=["knowledge-bases"]
+)

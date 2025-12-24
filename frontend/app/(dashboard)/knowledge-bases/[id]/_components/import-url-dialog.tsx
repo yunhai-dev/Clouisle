@@ -1,0 +1,147 @@
+'use client'
+
+import * as React from 'react'
+import { useTranslations } from 'next-intl'
+import { Link, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { knowledgeBasesApi, ApiError } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Field, FieldError } from '@/components/ui/field'
+
+interface ImportUrlDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  knowledgeBaseId: string
+  onSuccess: () => void
+}
+
+export function ImportUrlDialog({
+  open,
+  onOpenChange,
+  knowledgeBaseId,
+  onSuccess,
+}: ImportUrlDialogProps) {
+  const t = useTranslations('knowledgeBases')
+  const commonT = useTranslations('common')
+  
+  const [url, setUrl] = React.useState('')
+  const [name, setName] = React.useState('')
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
+  
+  // 重置状态
+  React.useEffect(() => {
+    if (open) {
+      setUrl('')
+      setName('')
+      setFieldErrors({})
+    }
+  }, [open])
+  
+  // 提交
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // 验证 URL
+    if (!url.trim()) {
+      setFieldErrors({ url: t('urlRequired') })
+      return
+    }
+    
+    try {
+      new URL(url.trim())
+    } catch {
+      setFieldErrors({ url: t('urlInvalid') })
+      return
+    }
+    
+    setIsLoading(true)
+    setFieldErrors({})
+    
+    try {
+      await knowledgeBasesApi.importUrl(knowledgeBaseId, url.trim(), name.trim() || undefined)
+      toast.success(t('urlImported'))
+      onOpenChange(false)
+      onSuccess()
+    } catch (error) {
+      if (error instanceof ApiError && error.isValidationError()) {
+        setFieldErrors(error.getFieldErrors())
+      }
+      // 其他错误已由 API 客户端处理
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>{t('importUrl')}</DialogTitle>
+            <DialogDescription>{t('importUrlDescription')}</DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            {/* URL */}
+            <Field>
+              <Label htmlFor="url">{t('url')}</Label>
+              <Input
+                id="url"
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder={t('urlPlaceholder')}
+                aria-invalid={!!fieldErrors.url}
+              />
+              <p className="text-xs text-muted-foreground">{t('urlHint')}</p>
+              {fieldErrors.url && <FieldError>{fieldErrors.url}</FieldError>}
+            </Field>
+            
+            {/* 名称（可选） */}
+            <Field>
+              <Label htmlFor="name">{t('documentName')} ({t('optional')})</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('documentNamePlaceholder')}
+                aria-invalid={!!fieldErrors.name}
+              />
+              {fieldErrors.name && <FieldError>{fieldErrors.name}</FieldError>}
+            </Field>
+          </div>
+          
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {commonT('cancel')}
+            </Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('importing')}
+                </>
+              ) : (
+                <>
+                  <Link className="mr-2 h-4 w-4" />
+                  {t('import')}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
