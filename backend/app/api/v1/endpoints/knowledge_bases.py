@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, UploadFile, File, Body
 from fastapi.responses import FileResponse
+from tortoise.expressions import F
 
 from app.api import deps
 from app.models.user import User, Team, TeamMember
@@ -1064,9 +1065,11 @@ async def update_document_chunk(
         vector_store = VectorStore(embedding_model_id=embedding_model_id)
         await vector_store.update_chunk_vector(chunk)
     except Exception as e:
-        import logging
-
-        logging.warning(f"Failed to update vector embedding: {e}")
+        logger.error(f"Failed to update vector embedding for chunk {chunk_id}: {e}", exc_info=True)
+        raise BusinessError(
+            code=ResponseCode.UNKNOWN_ERROR,
+            msg_key="vector_update_failed",
+        )
 
     return success(data=chunk, msg_key="chunk_updated")
 
@@ -1124,16 +1127,13 @@ async def delete_document_chunk(
     await doc.save()
 
     # Delete chunk
+    deleted_index = chunk.chunk_index
     await chunk.delete()
 
-    # Reindex remaining chunks
-    remaining_chunks = await DocumentChunk.filter(document_id=doc_id).order_by(
-        "chunk_index"
-    )
-    for idx, c in enumerate(remaining_chunks):
-        if c.chunk_index != idx:
-            c.chunk_index = idx
-            await c.save()
+    # Reindex remaining chunks with a single bulk update
+    await DocumentChunk.filter(
+        document_id=doc_id, chunk_index__gt=deleted_index
+    ).update(chunk_index=F("chunk_index") - 1)
 
     return success(data={"id": str(chunk_id)}, msg_key="chunk_deleted")
 
