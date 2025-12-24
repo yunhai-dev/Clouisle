@@ -1065,7 +1065,10 @@ async def update_document_chunk(
         vector_store = VectorStore(embedding_model_id=embedding_model_id)
         await vector_store.update_chunk_vector(chunk)
     except Exception as e:
-        logger.error(f"Failed to update vector embedding for chunk {chunk_id}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to update vector embedding for chunk {chunk_id}: {e}",
+            exc_info=True,
+        )
         raise BusinessError(
             code=ResponseCode.UNKNOWN_ERROR,
             msg_key="vector_update_failed",
