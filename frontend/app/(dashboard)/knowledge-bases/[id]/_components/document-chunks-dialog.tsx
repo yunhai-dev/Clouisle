@@ -29,7 +29,6 @@ export function DocumentChunksDialog({
   document,
 }: DocumentChunksDialogProps) {
   const t = useTranslations('knowledgeBases')
-  const commonT = useTranslations('common')
   
   const [chunks, setChunks] = React.useState<DocumentChunk[]>([])
   const [isLoading, setIsLoading] = React.useState(false)

@@ -247,7 +247,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
         // processing 或其他状态都表示任务已提交
         toast.success(t('documentProcessingStarted'))
       }
-    } catch (error) {
+    } catch {
       // 获取最新文档状态以显示错误信息
       try {
         const docData = await knowledgeBasesApi.getDocument(knowledgeBaseId, docId)
@@ -340,7 +340,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
         const docState = prev[docId]
         if (!docState) return prev
 
-        const newChunks = docState.previewChunks.map((chunk, idx) => {
+        const newChunks = docState.previewChunks.map((chunk) => {
           if (chunk.chunk_index === chunkIndex) {
             return {
               ...chunk,
@@ -469,25 +469,6 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
     }, 0)
   }
 
-  // 计算总体统计
-  const totalStats = React.useMemo(() => {
-    let totalChunks = 0
-    let totalTokens = 0
-    let totalChars = 0
-    let previewedCount = 0
-
-    Object.values(documentsState).forEach(state => {
-      if (state.previewStats) {
-        totalChunks += state.previewStats.total_chunks
-        totalTokens += state.previewStats.total_tokens
-        totalChars += state.previewStats.total_chars
-        previewedCount++
-      }
-    })
-
-    return { totalChunks, totalTokens, totalChars, previewedCount }
-  }, [documentsState])
-
   const pendingCount = Object.values(documentsState).filter(
     state => state.document?.status === 'pending'
   ).length
@@ -521,8 +502,6 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
       </div>
     )
   }
-
-  const currentState = documentsState[activeDocId]
 
   return (
     <div className="h-full flex">

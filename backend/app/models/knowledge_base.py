@@ -175,7 +175,9 @@ class Document(models.Model):
     # Timestamps
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
-    processed_at = fields.DatetimeField(null=True, description="When processing completed")
+    processed_at = fields.DatetimeField(
+        null=True, description="When processing completed"
+    )
 
     # Relations
     chunks: fields.ReverseRelation["DocumentChunk"]

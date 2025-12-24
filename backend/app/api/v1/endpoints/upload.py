@@ -22,7 +22,9 @@ router = APIRouter()
 # 统一使用项目根目录的 uploads/ 文件夹
 UPLOAD_DIR = os.path.join(
     os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        )
     ),
     "uploads",
 )

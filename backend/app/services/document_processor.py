@@ -56,7 +56,7 @@ EXT_TYPE_MAP: dict[str, str] = {
 class DocumentProcessor:
     """
     Document processing service.
-    
+
     Handles:
     - Document file storage
     - Text extraction from various formats
@@ -67,35 +67,39 @@ class DocumentProcessor:
     def __init__(self, upload_dir: str | None = None):
         """
         Initialize document processor.
-        
+
         Args:
             upload_dir: Base directory for document uploads
         """
         if upload_dir is None:
             # Default to project root uploads/documents
             base_dir = os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                os.path.dirname(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                )
             )
             upload_dir = os.path.join(base_dir, "uploads", "documents")
-        
+
         self.upload_dir = upload_dir
         os.makedirs(upload_dir, exist_ok=True)
 
-    def get_document_type(self, filename: str, content_type: str | None = None) -> str | None:
+    def get_document_type(
+        self, filename: str, content_type: str | None = None
+    ) -> str | None:
         """
         Determine document type from filename or content type.
-        
+
         Args:
             filename: Original filename
             content_type: MIME type if available
-            
+
         Returns:
             Document type string or None if unsupported
         """
         # Try content type first
         if content_type and content_type in MIME_TYPE_MAP:
             return MIME_TYPE_MAP[content_type]
-        
+
         # Fall back to extension
         ext = os.path.splitext(filename)[1].lower()
         return EXT_TYPE_MAP.get(ext)
@@ -103,35 +107,39 @@ class DocumentProcessor:
     def get_storage_path(self, kb_id: UUID, filename: str) -> str:
         """
         Generate storage path for a document.
-        
+
         Args:
             kb_id: Knowledge base ID
             filename: Original filename
-            
+
         Returns:
             Full path for storing the document
         """
         # Organize by KB ID and date
         date_path = datetime.now().strftime("%Y/%m")
-        
+
         # Generate unique filename
-        file_hash = hashlib.md5(f"{kb_id}{filename}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
+        file_hash = hashlib.md5(
+            f"{kb_id}{filename}{datetime.now().isoformat()}".encode()
+        ).hexdigest()[:8]
         ext = os.path.splitext(filename)[1]
-        unique_name = f"{file_hash}_{filename}" if len(filename) < 50 else f"{file_hash}{ext}"
-        
+        unique_name = (
+            f"{file_hash}_{filename}" if len(filename) < 50 else f"{file_hash}{ext}"
+        )
+
         dir_path = os.path.join(self.upload_dir, str(kb_id), date_path)
         os.makedirs(dir_path, exist_ok=True)
-        
+
         return os.path.join(dir_path, unique_name)
 
     async def save_file(self, content: bytes, path: str) -> int:
         """
         Save file content to disk.
-        
+
         Args:
             content: File content bytes
             path: Target path
-            
+
         Returns:
             File size in bytes
         """
@@ -143,10 +151,10 @@ class DocumentProcessor:
     async def read_file(self, path: str) -> bytes:
         """
         Read file content from disk.
-        
+
         Args:
             path: File path
-            
+
         Returns:
             File content bytes
         """
@@ -156,10 +164,10 @@ class DocumentProcessor:
     def delete_file(self, path: str) -> bool:
         """
         Delete a file from disk.
-        
+
         Args:
             path: File path
-            
+
         Returns:
             True if deleted, False if not found
         """
@@ -173,12 +181,12 @@ class DocumentProcessor:
     ) -> tuple[str, dict[str, Any]]:
         """
         Extract text content from a document.
-        
+
         Args:
             path: File path
             doc_type: Document type
             clean_text: Whether to clean and normalize text
-            
+
         Returns:
             Tuple of (extracted_text, metadata)
         """
@@ -187,7 +195,7 @@ class DocumentProcessor:
             "file_size": len(content),
             "doc_type": doc_type,
         }
-        
+
         try:
             if doc_type == DocumentType.TXT.value:
                 text = content.decode("utf-8", errors="ignore")
@@ -213,20 +221,20 @@ class DocumentProcessor:
             else:
                 # Try to decode as text
                 text = content.decode("utf-8", errors="ignore")
-                
+
         except Exception as e:
             logger.error(f"Error extracting text from {path}: {e}")
             raise ValueError(f"Failed to extract text: {e}")
-        
+
         # Clean up text
         text = self._clean_text(text, clean=clean_text)
         metadata["char_count"] = len(text)
-        
+
         return text, metadata
 
     def _clean_text(self, text: str, clean: bool = True) -> str:
         """Clean and normalize text.
-        
+
         Args:
             text: Text to clean
             clean: Whether to perform aggressive cleaning. If False, only
@@ -236,7 +244,7 @@ class DocumentProcessor:
         text = text.replace("\x00", "")
         # Always normalize line endings
         text = text.replace("\r\n", "\n").replace("\r", "\n")
-        
+
         if clean:
             # Remove excessive blank lines (collapse consecutive newlines to single newline)
             text = re.sub(r"\n{2,}", "\n", text)
@@ -245,35 +253,37 @@ class DocumentProcessor:
             # Strip leading/trailing whitespace from each line
             lines = [line.strip() for line in text.split("\n")]
             text = "\n".join(lines)
-            
+
             # Strip leading/trailing whitespace from the whole text
             text = text.strip()
-        
+
         return text
 
-    def _extract_with_markitdown(self, path: str, doc_type: str) -> tuple[str, dict[str, Any]]:
+    def _extract_with_markitdown(
+        self, path: str, doc_type: str
+    ) -> tuple[str, dict[str, Any]]:
         """
         Extract text from documents using MarkItDown.
-        
+
         Supports: PDF, DOCX, DOC, PPTX, XLSX, XLS and more.
         MarkItDown converts documents to Markdown format.
         """
         metadata: dict[str, Any] = {"format": "markdown"}
-        
+
         try:
             from markitdown import MarkItDown
-            
+
             md = MarkItDown()
             result = md.convert(path)
-            
+
             text = result.text_content
-            
+
             # Extract title if available
             if result.title:
                 metadata["title"] = result.title
-            
+
             return text, metadata
-            
+
         except ImportError:
             raise ValueError(
                 f"MarkItDown not installed. Install with: pip install 'markitdown[pdf,xlsx,xls]'. "
@@ -284,22 +294,22 @@ class DocumentProcessor:
         """Extract text from CSV content."""
         import csv
         import io
-        
+
         text = content.decode("utf-8", errors="ignore")
         reader = csv.reader(io.StringIO(text))
-        
+
         rows = []
         for row in reader:
             rows.append(" | ".join(row))
-        
+
         return "\n".join(rows)
 
     def _extract_json_text(self, content: bytes) -> str:
         """Extract text from JSON content."""
         import json
-        
+
         data = json.loads(content.decode("utf-8", errors="ignore"))
-        
+
         def flatten_json(obj: Any, prefix: str = "") -> list[str]:
             items = []
             if isinstance(obj, dict):
@@ -312,7 +322,7 @@ class DocumentProcessor:
             else:
                 items.append(f"{prefix}: {obj}")
             return items
-        
+
         return "\n".join(flatten_json(data))
 
     async def fetch_url_content(
@@ -320,48 +330,48 @@ class DocumentProcessor:
     ) -> tuple[str, dict[str, Any]]:
         """
         Fetch and extract content from a URL.
-        
+
         Args:
             url: Web page URL
             clean_text: Whether to clean and normalize text
-            
+
         Returns:
             Tuple of (extracted_text, metadata)
         """
         metadata: dict[str, Any] = {"source_url": url}
-        
+
         try:
             # Use MarkItDown for URL fetching (supports YouTube, HTML, etc.)
             from markitdown import MarkItDown
-            
+
             md = MarkItDown()
             result = md.convert(url)
-            
+
             text = result.text_content
             metadata["format"] = "markdown"
-            
+
             if result.title:
                 metadata["title"] = result.title
-                
+
         except ImportError:
             # Fallback to httpx
             import httpx
-            
+
             async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
                 response = await client.get(url)
                 response.raise_for_status()
-                
+
                 content_type = response.headers.get("content-type", "")
                 metadata["content_type"] = content_type
-                
+
                 if "application/json" in content_type:
                     text = self._extract_json_text(response.content)
                 else:
                     text = response.text
-        
+
         text = self._clean_text(text, clean=clean_text)
         metadata["char_count"] = len(text)
-        
+
         return text, metadata
 
 
@@ -373,7 +383,7 @@ DEFAULT_CHUNK_OVERLAP = 50
 class TextChunker:
     """
     Text chunking service for splitting documents into searchable chunks.
-    
+
     Uses semantic-aware splitting that respects:
     - Paragraph boundaries
     - Sentence boundaries
@@ -383,19 +393,19 @@ class TextChunker:
     # Default separators in order of priority
     DEFAULT_SEPARATORS = [
         "\n\n",  # Paragraph
-        "\n",    # Line
-        "。",    # Chinese period
-        "！",    # Chinese exclamation
-        "？",    # Chinese question
-        ". ",    # Sentence
+        "\n",  # Line
+        "。",  # Chinese period
+        "！",  # Chinese exclamation
+        "？",  # Chinese question
+        ". ",  # Sentence
         "! ",
         "? ",
-        "；",    # Chinese semicolon
+        "；",  # Chinese semicolon
         "; ",
-        "，",    # Chinese comma
+        "，",  # Chinese comma
         ", ",
-        " ",     # Word
-        "",      # Character
+        " ",  # Word
+        "",  # Character
     ]
 
     def __init__(
@@ -406,7 +416,7 @@ class TextChunker:
     ):
         """
         Initialize chunker.
-        
+
         Args:
             chunk_size: Target chunk size in tokens (approx 4 chars = 1 token)
             chunk_overlap: Number of overlapping tokens between chunks
@@ -415,13 +425,13 @@ class TextChunker:
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        
+
         # Store custom separators separately for primary splitting
         self.custom_separators = [s for s in (separators or []) if s]
-        
+
         # Default separators for secondary splitting (within chunks)
         self.default_separators = self.DEFAULT_SEPARATORS.copy()
-        
+
         # Combined list: custom first, then defaults
         if self.custom_separators:
             self.separators = self.custom_separators + [
@@ -429,7 +439,7 @@ class TextChunker:
             ]
         else:
             self.separators = self.default_separators
-        
+
         # Approximate chars per token
         self.chars_per_token = 4
 
@@ -440,37 +450,39 @@ class TextChunker:
     def chunk_text(self, text: str) -> list[dict[str, Any]]:
         """
         Split text into chunks.
-        
+
         If custom separators are provided, text is first split by those separators,
         then each section is further split if it exceeds the target size.
-        
+
         Args:
             text: Text to chunk
-            
+
         Returns:
             List of chunk dicts with content, index, and metadata
         """
         if not text.strip():
             return []
-        
+
         target_chars = self.chunk_size * self.chars_per_token
         overlap_chars = self.chunk_overlap * self.chars_per_token
-        
+
         # If custom separators are provided, first split by them
         if self.custom_separators:
             chunks = self._split_by_custom_separators(text, target_chars, overlap_chars)
         else:
             chunks = self._split_recursive(text, target_chars, overlap_chars)
-        
+
         result = []
         for idx, chunk_text in enumerate(chunks):
-            result.append({
-                "content": chunk_text,
-                "chunk_index": idx,
-                "token_count": self.estimate_tokens(chunk_text),
-                "char_count": len(chunk_text),
-            })
-        
+            result.append(
+                {
+                    "content": chunk_text,
+                    "chunk_index": idx,
+                    "token_count": self.estimate_tokens(chunk_text),
+                    "char_count": len(chunk_text),
+                }
+            )
+
         return result
 
     def _split_by_custom_separators(
@@ -478,22 +490,22 @@ class TextChunker:
     ) -> list[str]:
         """
         Split text by custom separators first, then apply size limits.
-        
+
         This ensures that custom separators are always respected as primary
         split points, regardless of chunk size.
         """
         # Create pattern for all separators
         # Escape separators to handle special regex characters
         pattern = f"({'|'.join(map(re.escape, self.custom_separators))})"
-        
+
         # Split keeping the separators
         parts = re.split(pattern, text)
-        
+
         # Reassemble parts attaching separators to the following text
         # e.g. "text1", "###", "text2" -> "text1", "###text2"
         sections = []
         current_section = ""
-        
+
         for part in parts:
             if part in self.custom_separators:
                 if current_section:
@@ -501,20 +513,20 @@ class TextChunker:
                 current_section = part
             else:
                 current_section += part
-        
+
         if current_section:
             sections.append(current_section)
-            
+
         # Filter empty sections (but keep whitespace-only sections if they exist)
         sections = [s for s in sections if s]
-        
+
         # Now process each section
         all_chunks = []
         previous_chunk_tail = ""
-        
+
         for section in sections:
             section_chunks = []
-            
+
             # Check size in tokens
             if self.estimate_tokens(section) <= self.chunk_size:
                 section_chunks = [section]
@@ -523,13 +535,13 @@ class TextChunker:
                 section_chunks = self._split_recursive_with_separators(
                     section, target_size, overlap, self.default_separators
                 )
-            
+
             # Apply overlap from previous section's last chunk to this section's first chunk
             if previous_chunk_tail and overlap > 0 and section_chunks:
                 section_chunks[0] = previous_chunk_tail + section_chunks[0]
-            
+
             all_chunks.extend(section_chunks)
-            
+
             # Update previous chunk tail for next iteration
             if section_chunks:
                 last_chunk = section_chunks[-1]
@@ -540,28 +552,28 @@ class TextChunker:
                         previous_chunk_tail = last_chunk
                 else:
                     previous_chunk_tail = ""
-        
+
         return all_chunks
 
     def _apply_overlap(self, chunks: list[str], overlap: int) -> list[str]:
         """Apply overlap between chunks by prepending end of previous chunk."""
         if len(chunks) <= 1:
             return chunks
-        
+
         result = [chunks[0]]
         for i in range(1, len(chunks)):
             prev_chunk = chunks[i - 1]
             curr_chunk = chunks[i]
-            
+
             # Get the overlap portion from the end of previous chunk
             if len(prev_chunk) > overlap:
                 overlap_text = prev_chunk[-overlap:]
             else:
                 overlap_text = prev_chunk
-            
+
             # Prepend overlap to current chunk
             result.append(overlap_text + curr_chunk)
-        
+
         return result
 
     def _split_recursive_with_separators(
@@ -570,7 +582,7 @@ class TextChunker:
         """Recursively split text using specific separators."""
         if len(text) <= target_size:
             return [text] if text else []
-        
+
         # Find the best separator
         for separator in separators:
             if separator:
@@ -578,10 +590,10 @@ class TextChunker:
             else:
                 # Character-level split
                 splits = list(text)
-            
+
             if len(splits) > 1:
                 return self._merge_splits(splits, separator, target_size, overlap)
-        
+
         # Fallback: hard split
         chunks = []
         start = 0
@@ -596,16 +608,14 @@ class TextChunker:
                 start = end
                 if start >= len(text):
                     break
-        
+
         return chunks
 
-    def _split_recursive(
-        self, text: str, target_size: int, overlap: int
-    ) -> list[str]:
+    def _split_recursive(self, text: str, target_size: int, overlap: int) -> list[str]:
         """Recursively split text using separators."""
         if len(text) <= target_size:
             return [text] if text.strip() else []
-        
+
         # Find the best separator
         for separator in self.separators:
             if separator:
@@ -613,10 +623,10 @@ class TextChunker:
             else:
                 # Character-level split
                 splits = list(text)
-            
+
             if len(splits) > 1:
                 return self._merge_splits(splits, separator, target_size, overlap)
-        
+
         # Fallback: hard split
         chunks = []
         start = 0
@@ -631,7 +641,7 @@ class TextChunker:
                 start = end
                 if start >= len(text):
                     break
-        
+
         return chunks
 
     def _merge_splits(
@@ -645,15 +655,15 @@ class TextChunker:
         chunks = []
         current_chunk: list[str] = []
         current_size = 0
-        
+
         for split in splits:
             split_size = len(split) + len(separator)
-            
+
             if current_size + split_size > target_size and current_chunk:
                 # Save current chunk
                 chunk_text = separator.join(current_chunk)
                 chunks.append(chunk_text)
-                
+
                 # Start new chunk with overlap (only if overlap > 0)
                 if overlap > 0:
                     overlap_tokens: list[str] = []
@@ -664,22 +674,22 @@ class TextChunker:
                             overlap_size += len(s) + len(separator)
                         else:
                             break
-                    
+
                     current_chunk = overlap_tokens
                     current_size = overlap_size
                 else:
                     current_chunk = []
                     current_size = 0
-            
+
             current_chunk.append(split)
             current_size += split_size
-        
+
         # Don't forget the last chunk
         if current_chunk:
             chunk_text = separator.join(current_chunk)
             if chunk_text:
                 chunks.append(chunk_text)
-        
+
         return chunks
 
 

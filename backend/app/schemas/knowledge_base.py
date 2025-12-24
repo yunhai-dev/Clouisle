@@ -60,7 +60,9 @@ class KnowledgeBaseSettings(BaseModel):
 class KnowledgeBaseBase(BaseModel):
     """Base schema for knowledge base"""
 
-    name: str = Field(..., min_length=1, max_length=100, description="Knowledge base name")
+    name: str = Field(
+        ..., min_length=1, max_length=100, description="Knowledge base name"
+    )
     description: Optional[str] = Field(None, max_length=500, description="Description")
     icon: Optional[str] = Field(None, max_length=50, description="Icon name or emoji")
 
@@ -239,9 +241,13 @@ class ProcessRequest(BaseModel):
     """Request to start processing a pending document"""
 
     chunk_size: Optional[int] = Field(None, ge=100, description="Chunk size in tokens")
-    chunk_overlap: Optional[int] = Field(None, ge=0, description="Overlap between chunks")
+    chunk_overlap: Optional[int] = Field(
+        None, ge=0, description="Overlap between chunks"
+    )
     separator: Optional[str] = Field(None, description="Custom text separator")
-    clean_text: Optional[bool] = Field(None, description="Whether to clean and normalize text")
+    clean_text: Optional[bool] = Field(
+        None, description="Whether to clean and normalize text"
+    )
 
 
 class ChunkInput(BaseModel):
@@ -254,7 +260,9 @@ class ChunkInput(BaseModel):
 class ProcessWithChunksRequest(BaseModel):
     """Request to process a document with pre-defined chunks from frontend"""
 
-    chunks: List[ChunkInput] = Field(..., min_length=1, description="Pre-chunked content")
+    chunks: List[ChunkInput] = Field(
+        ..., min_length=1, description="Pre-chunked content"
+    )
 
 
 class ChunkPreviewRequest(BaseModel):
@@ -263,7 +271,9 @@ class ChunkPreviewRequest(BaseModel):
     chunk_size: int = Field(default=500, ge=100, description="Chunk size in tokens")
     chunk_overlap: int = Field(default=50, ge=0, description="Overlap between chunks")
     separator: Optional[str] = Field(default=None, description="Custom text separator")
-    clean_text: bool = Field(default=True, description="Whether to clean and normalize text")
+    clean_text: bool = Field(
+        default=True, description="Whether to clean and normalize text"
+    )
 
 
 class ChunkPreviewItem(BaseModel):
@@ -289,6 +299,7 @@ class ChunkPreviewResponse(BaseModel):
 
 class SearchMode:
     """Search mode constants"""
+
     VECTOR = "vector"  # Vector/semantic search
     FULLTEXT = "fulltext"  # Full-text search
     HYBRID = "hybrid"  # Hybrid (vector + fulltext)
@@ -298,7 +309,9 @@ class SearchRequest(BaseModel):
     """Search request for knowledge base"""
 
     query: str = Field(..., min_length=1, max_length=1000, description="Search query")
-    search_mode: str = Field(default="hybrid", description="Search mode: vector, fulltext, hybrid")
+    search_mode: str = Field(
+        default="hybrid", description="Search mode: vector, fulltext, hybrid"
+    )
     top_k: int = Field(default=5, ge=1, le=20, description="Number of results")
     score_threshold: float = Field(
         default=0.0, ge=0, le=1, description="Minimum similarity score"

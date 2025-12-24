@@ -229,7 +229,6 @@ async def send_email_to_users(
     )
 
 
-
 @router.get("/me", response_model=Response[UserSchema])
 async def read_user_me(
     current_user: User = Depends(deps.get_current_active_user),

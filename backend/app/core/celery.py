@@ -28,18 +28,14 @@ celery_app.conf.update(
     result_serializer="json",
     timezone=settings.TIMEZONE,
     enable_utc=True,
-    
     # Task execution settings
     task_acks_late=True,
     task_reject_on_worker_lost=True,
-    
     # Result settings
     result_expires=3600 * 24,  # 24 hours
-    
     # Worker settings
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=100,
-    
     # Retry settings
     broker_connection_retry_on_startup=True,
 )
@@ -56,14 +52,14 @@ def init_tortoise(**kwargs):
     """Initialize Tortoise ORM for each worker process."""
     import asyncio
     from tortoise import Tortoise
-    
+
     async def _init():
         await Tortoise.init(
             db_url=settings.DATABASE_URL
             or f"postgres://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}",
             modules={"models": ["app.models"]},
         )
-    
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(_init())
@@ -75,10 +71,10 @@ def close_tortoise(**kwargs):
     """Close Tortoise ORM connections when worker shuts down."""
     import asyncio
     from tortoise import Tortoise
-    
+
     async def _close():
         await Tortoise.close_connections()
-    
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():

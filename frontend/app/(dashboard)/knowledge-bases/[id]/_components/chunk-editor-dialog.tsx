@@ -210,7 +210,7 @@ export function ChunkEditorDialog({
 
     setIsSaving(true)
     try {
-      const newChunk = await knowledgeBasesApi.createChunk(
+      await knowledgeBasesApi.createChunk(
         knowledgeBaseId,
         document.id,
         { content: t('newChunkPlaceholder') },
@@ -298,7 +298,7 @@ export function ChunkEditorDialog({
                 <>
                   <ScrollArea className="flex-1 pr-4">
                     <div className="space-y-3">
-                      {chunks.map((chunk, index) => (
+                      {chunks.map((chunk) => (
                         <div
                           key={chunk.id}
                           className="group rounded-lg border bg-card hover:border-primary/50 transition-colors"

@@ -4,10 +4,10 @@ Provides CRUD operations for knowledge bases and documents.
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, Body
 from fastapi.responses import FileResponse
 
 from app.api import deps
@@ -101,9 +101,11 @@ async def check_kb_access(
     Check if user has access to the knowledge base.
     Returns the knowledge base if access is granted.
     """
-    kb = await KnowledgeBase.filter(id=kb_id).prefetch_related(
-        "team", "created_by"
-    ).first()
+    kb = (
+        await KnowledgeBase.filter(id=kb_id)
+        .prefetch_related("team", "created_by")
+        .first()
+    )
     if not kb:
         raise BusinessError(
             code=ResponseCode.KB_NOT_FOUND,
@@ -229,9 +231,11 @@ async def update_knowledge_base(
     # Update fields
     if kb_in.name is not None:
         # Check name uniqueness
-        existing = await KnowledgeBase.filter(
-            team_id=kb.team.id, name=kb_in.name
-        ).exclude(id=kb_id).first()
+        existing = (
+            await KnowledgeBase.filter(team_id=kb.team.id, name=kb_in.name)
+            .exclude(id=kb_id)
+            .first()
+        )
         if existing:
             raise BusinessError(
                 code=ResponseCode.KB_NAME_EXISTS,
@@ -298,15 +302,17 @@ async def get_knowledge_base_stats(
 
     # Use actual document count instead of cached value
     actual_doc_count = len(docs)
-    
+
     # Calculate actual chunks and tokens from completed documents
     total_chunks = sum(doc.chunk_count for doc in docs)
     total_tokens = sum(doc.token_count for doc in docs)
-    
+
     # Sync cached values if they differ
-    if (kb.document_count != actual_doc_count or 
-        kb.total_chunks != total_chunks or 
-        kb.total_tokens != total_tokens):
+    if (
+        kb.document_count != actual_doc_count
+        or kb.total_chunks != total_chunks
+        or kb.total_tokens != total_tokens
+    ):
         kb.document_count = actual_doc_count
         kb.total_chunks = total_chunks
         kb.total_tokens = total_tokens
@@ -368,7 +374,7 @@ async def upload_document(
     """
     Upload a document to the knowledge base.
     Supported formats: PDF, DOCX, TXT, MD, HTML, CSV, XLSX, JSON.
-    
+
     The document will be created with 'pending' status.
     Use the /process endpoint to start processing after configuring chunk settings.
     """
@@ -382,9 +388,7 @@ async def upload_document(
         )
 
     # Determine document type
-    doc_type = document_processor.get_document_type(
-        file.filename, file.content_type
-    )
+    doc_type = document_processor.get_document_type(file.filename, file.content_type)
     if not doc_type:
         raise BusinessError(
             code=ResponseCode.INVALID_DOCUMENT_TYPE,
@@ -454,6 +458,7 @@ async def add_url_document(
     # Trigger async URL fetch and processing task
     try:
         from app.tasks.knowledge_base import process_url_document_task
+
         task = process_url_document_task.delay(str(doc.id))
         # Save task ID for potential cancellation
         doc.metadata = doc.metadata or {}
@@ -461,6 +466,7 @@ async def add_url_document(
         await doc.save()
     except Exception:
         import logging
+
         logging.warning("Celery task not dispatched - worker may not be running")
 
     # Reload with relations
@@ -479,9 +485,11 @@ async def get_document(
     """
     await check_kb_access(kb_id, current_user)
 
-    doc = await Document.filter(
-        id=doc_id, knowledge_base_id=kb_id
-    ).prefetch_related("uploaded_by").first()
+    doc = (
+        await Document.filter(id=doc_id, knowledge_base_id=kb_id)
+        .prefetch_related("uploaded_by")
+        .first()
+    )
     if not doc:
         raise BusinessError(
             code=ResponseCode.DOCUMENT_NOT_FOUND,
@@ -547,6 +555,7 @@ async def delete_document(
         if task_id:
             try:
                 from app.core.celery import celery_app
+
                 celery_app.control.revoke(task_id, terminate=True)
                 logger.info(f"Revoked Celery task {task_id} for document {doc_id}")
             except Exception as e:
@@ -599,6 +608,7 @@ async def download_document(
         )
 
     import os
+
     if not os.path.exists(doc.file_path):
         raise BusinessError(
             code=ResponseCode.VALIDATION_ERROR,
@@ -628,18 +638,20 @@ async def download_document(
     )
 
 
-@router.post("/{kb_id}/documents/{doc_id}/process", response_model=Response[DocumentSchema])
+@router.post(
+    "/{kb_id}/documents/{doc_id}/process", response_model=Response[DocumentSchema]
+)
 async def process_document(
     kb_id: UUID,
     doc_id: UUID,
-    process_in: ProcessRequest = ProcessRequest(),
+    process_in: Optional[ProcessRequest] = Body(default=None),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Start processing a pending document.
     Allows configuring chunk settings before processing.
     """
-    kb = await check_kb_access(kb_id, current_user, require_write=True)
+    await check_kb_access(kb_id, current_user, require_write=True)
 
     doc = await Document.filter(id=doc_id, knowledge_base_id=kb_id).first()
     if not doc:
@@ -657,19 +669,21 @@ async def process_document(
 
     # Store chunk settings in document metadata for processing
     doc.metadata = doc.metadata or {}
-    if process_in.chunk_size is not None:
-        doc.metadata["chunk_size"] = process_in.chunk_size
-    if process_in.chunk_overlap is not None:
-        doc.metadata["chunk_overlap"] = process_in.chunk_overlap
-    if process_in.separator is not None:
-        doc.metadata["separator"] = process_in.separator
-    if process_in.clean_text is not None:
-        doc.metadata["clean_text"] = process_in.clean_text
+    if process_in is not None:
+        if process_in.chunk_size is not None:
+            doc.metadata["chunk_size"] = process_in.chunk_size
+        if process_in.chunk_overlap is not None:
+            doc.metadata["chunk_overlap"] = process_in.chunk_overlap
+        if process_in.separator is not None:
+            doc.metadata["separator"] = process_in.separator
+        if process_in.clean_text is not None:
+            doc.metadata["clean_text"] = process_in.clean_text
     await doc.save()
 
     # Trigger async document processing task
     try:
         from app.tasks.knowledge_base import process_document_task
+
         task = process_document_task.delay(str(doc.id))
         # Save task ID for potential cancellation
         doc.metadata["task_id"] = task.id
@@ -695,14 +709,14 @@ async def process_document_with_chunks(
 ) -> Any:
     """
     Process a document with pre-defined chunks from the frontend.
-    
+
     This endpoint accepts chunks that have been edited/created in the frontend preview,
     saves them directly to the database, and triggers vector embedding generation.
-    
+
     This bypasses the server-side chunking process, allowing users to have full
     control over how their documents are segmented.
     """
-    kb = await check_kb_access(kb_id, current_user, require_write=True)
+    await check_kb_access(kb_id, current_user, require_write=True)
 
     doc = await Document.filter(id=doc_id, knowledge_base_id=kb_id).first()
     if not doc:
@@ -763,8 +777,11 @@ async def process_document_with_chunks(
             # Import celery_app first to ensure tasks are bound to the correct app
             from app.core.celery import celery_app  # noqa: F401
             from app.tasks.knowledge_base import embed_document_chunks_task
+
             logger.info(f"Dispatching embed_document_chunks_task for document {doc.id}")
-            logger.info(f"Task app broker: {embed_document_chunks_task.app.conf.broker_url}")
+            logger.info(
+                f"Task app broker: {embed_document_chunks_task.app.conf.broker_url}"
+            )
             task = embed_document_chunks_task.delay(str(doc.id))
             logger.info(f"Task dispatched successfully, task_id: {task.id}")
             doc.metadata = doc.metadata or {}
@@ -777,7 +794,7 @@ async def process_document_with_chunks(
             doc.error_message = f"Failed to start embedding task: {e}"
             await doc.save()
             raise BusinessError(
-                code=ResponseCode.INTERNAL_ERROR,
+                code=ResponseCode.UNKNOWN_ERROR,
                 msg_key="task_dispatch_failed",
             )
 
@@ -792,7 +809,7 @@ async def process_document_with_chunks(
         await doc.save()
         logger.exception(f"Error processing document with chunks: {e}")
         raise BusinessError(
-            code=ResponseCode.INTERNAL_ERROR,
+            code=ResponseCode.UNKNOWN_ERROR,
             msg_key="document_process_failed",
         )
 
@@ -811,7 +828,7 @@ async def preview_document_chunks(
     """
     Preview how a document will be chunked with given settings.
     This extracts the text and generates chunks without saving them.
-    
+
     Returns a preview of the chunking results with statistics.
     """
     await check_kb_access(kb_id, current_user)
@@ -847,7 +864,7 @@ async def preview_document_chunks(
 
         # Create chunker with preview settings
         from app.services.document_processor import TextChunker
-        
+
         separators = [preview_in.separator] if preview_in.separator else None
         chunker = TextChunker(
             chunk_size=preview_in.chunk_size,
@@ -885,12 +902,14 @@ async def preview_document_chunks(
     except Exception as e:
         logger.exception(f"Error previewing chunks for document {doc_id}: {e}")
         raise BusinessError(
-            code=ResponseCode.INTERNAL_ERROR,
+            code=ResponseCode.UNKNOWN_ERROR,
             msg_key="chunk_preview_failed",
         )
 
 
-@router.post("/{kb_id}/documents/{doc_id}/reprocess", response_model=Response[DocumentSchema])
+@router.post(
+    "/{kb_id}/documents/{doc_id}/reprocess", response_model=Response[DocumentSchema]
+)
 async def reprocess_document(
     kb_id: UUID,
     doc_id: UUID,
@@ -911,9 +930,13 @@ async def reprocess_document(
 
     # Cancel existing task if any
     old_task_id = (doc.metadata or {}).get("task_id")
-    if old_task_id and doc.status in [DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value]:
+    if old_task_id and doc.status in [
+        DocumentStatus.PENDING.value,
+        DocumentStatus.PROCESSING.value,
+    ]:
         try:
             from app.core.celery import celery_app
+
             celery_app.control.revoke(old_task_id, terminate=True)
         except Exception:
             pass
@@ -926,6 +949,7 @@ async def reprocess_document(
     # Trigger reprocessing task
     try:
         from app.tasks.knowledge_base import reprocess_document_task
+
         task = reprocess_document_task.delay(str(doc.id))
         # Save new task ID
         doc.metadata = doc.metadata or {}
@@ -933,6 +957,7 @@ async def reprocess_document(
         await doc.save()
     except Exception:
         import logging
+
         logging.warning("Celery task not dispatched - worker may not be running")
 
     doc = await Document.get(id=doc_id).prefetch_related("uploaded_by")
@@ -1017,7 +1042,7 @@ async def update_document_chunk(
 
     old_token_count = chunk.token_count
     chunk.content = chunk_in.content
-    
+
     # Recalculate token count
     new_token_count = len(chunk_in.content) // 4  # Simple estimate
     chunk.token_count = new_token_count
@@ -1027,17 +1052,20 @@ async def update_document_chunk(
     token_diff = new_token_count - old_token_count
     doc.token_count += token_diff
     await doc.save()
-    
+
     kb.total_tokens += token_diff
     await kb.save()
 
     # Update vector embedding
     try:
-        embedding_model_id = str(kb.embedding_model_id) if kb.embedding_model_id else None
+        embedding_model_id = (
+            str(kb.embedding_model_id) if kb.embedding_model_id else None
+        )
         vector_store = VectorStore(embedding_model_id=embedding_model_id)
         await vector_store.update_chunk_vector(chunk)
     except Exception as e:
         import logging
+
         logging.warning(f"Failed to update vector embedding: {e}")
 
     return success(data=chunk, msg_key="chunk_updated")
@@ -1076,11 +1104,14 @@ async def delete_document_chunk(
 
     # Delete vector
     try:
-        embedding_model_id = str(kb.embedding_model_id) if kb.embedding_model_id else None
+        embedding_model_id = (
+            str(kb.embedding_model_id) if kb.embedding_model_id else None
+        )
         vector_store = VectorStore(embedding_model_id=embedding_model_id)
         await vector_store.delete_chunk_vector(chunk_id)
     except Exception as e:
         import logging
+
         logging.warning(f"Failed to delete vector: {e}")
 
     # Update statistics
@@ -1096,7 +1127,9 @@ async def delete_document_chunk(
     await chunk.delete()
 
     # Reindex remaining chunks
-    remaining_chunks = await DocumentChunk.filter(document_id=doc_id).order_by("chunk_index")
+    remaining_chunks = await DocumentChunk.filter(document_id=doc_id).order_by(
+        "chunk_index"
+    )
     for idx, c in enumerate(remaining_chunks):
         if c.chunk_index != idx:
             c.chunk_index = idx
@@ -1132,8 +1165,10 @@ async def create_document_chunk(
         )
 
     # Determine chunk index
-    existing_chunks = await DocumentChunk.filter(document_id=doc_id).order_by("chunk_index")
-    
+    existing_chunks = await DocumentChunk.filter(document_id=doc_id).order_by(
+        "chunk_index"
+    )
+
     if after_index is not None:
         new_index = after_index + 1
         # Shift subsequent chunks
@@ -1166,11 +1201,14 @@ async def create_document_chunk(
 
     # Create vector embedding
     try:
-        embedding_model_id = str(kb.embedding_model_id) if kb.embedding_model_id else None
+        embedding_model_id = (
+            str(kb.embedding_model_id) if kb.embedding_model_id else None
+        )
         vector_store = VectorStore(embedding_model_id=embedding_model_id)
         await vector_store.add_chunk_vector(kb_id, chunk)
     except Exception as e:
         import logging
+
         logging.warning(f"Failed to create vector embedding: {e}")
 
     return success(data=chunk, msg_key="chunk_created")
@@ -1191,7 +1229,7 @@ async def rechunk_document(
     Re-chunk a document with new chunking settings.
     This will delete all existing chunks and create new ones.
     """
-    kb = await check_kb_access(kb_id, current_user, require_write=True)
+    await check_kb_access(kb_id, current_user, require_write=True)
 
     doc = await Document.filter(id=doc_id, knowledge_base_id=kb_id).first()
     if not doc:
@@ -1212,6 +1250,7 @@ async def rechunk_document(
     if old_task_id and doc.status == DocumentStatus.PENDING.value:
         try:
             from app.core.celery import celery_app
+
             celery_app.control.revoke(old_task_id, terminate=True)
         except Exception:
             pass
@@ -1231,12 +1270,14 @@ async def rechunk_document(
     # Trigger rechunk task
     try:
         from app.tasks.knowledge_base import rechunk_document_task
+
         task = rechunk_document_task.delay(str(doc.id))
         # Save new task ID
         doc.metadata["task_id"] = task.id
         await doc.save()
     except Exception:
         import logging
+
         logging.warning("Celery task not dispatched - worker may not be running")
 
     doc = await Document.get(id=doc_id).prefetch_related("uploaded_by")
@@ -1254,12 +1295,12 @@ async def search_knowledge_base(
 ) -> Any:
     """
     Search the knowledge base.
-    
+
     Supports three search modes:
     - vector: Semantic/vector similarity search
     - fulltext: Keyword/full-text search
     - hybrid: Combined vector + fulltext with RRF fusion
-    
+
     Returns relevant document chunks with similarity scores.
     """
     kb = await check_kb_access(kb_id, current_user)

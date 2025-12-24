@@ -8,7 +8,6 @@ import {
   Upload,
   Link,
   Settings,
-  Database,
   FileText,
   Layers,
   HardDrive,
@@ -22,7 +21,6 @@ import { knowledgeBasesApi, type KnowledgeBase, type KnowledgeBaseStats } from '
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DocumentsTable } from './documents-table'
 import { UploadDocumentDialog } from './upload-document-dialog'
 import { ImportUrlDialog } from './import-url-dialog'
@@ -34,7 +32,6 @@ interface KnowledgeBaseDetailClientProps {
 
 export function KnowledgeBaseDetailClient({ knowledgeBaseId }: KnowledgeBaseDetailClientProps) {
   const t = useTranslations('knowledgeBases')
-  const commonT = useTranslations('common')
   const router = useRouter()
   
   // 数据状态
@@ -80,15 +77,6 @@ export function KnowledgeBaseDetailClient({ knowledgeBaseId }: KnowledgeBaseDeta
   const refreshDocuments = () => {
     setRefreshTrigger(prev => prev + 1)
     loadKnowledgeBase(false) // 静默刷新统计
-  }
-  
-  // 格式化文件大小
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
   
   if (isLoading || !knowledgeBase) {
