@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { useSettings } from '@/hooks/use-settings'
@@ -26,8 +27,16 @@ export default function DashboardLayout({
   // Direction 控制侧边栏位置
   const sidebarSide = effectiveDirection === 'rtl' ? 'right' : 'left'
 
+  // 使用受控模式，通过 open 属性来控制侧边栏状态
+  const [open, setOpen] = React.useState(sidebarOpen)
+  
+  // 当 layoutVariant 改变时更新 open 状态
+  React.useEffect(() => {
+    setOpen(sidebarOpen)
+  }, [sidebarOpen])
+
   return (
-    <SidebarProvider defaultOpen={sidebarOpen} key={effectiveLayoutVariant}>
+    <SidebarProvider open={open} onOpenChange={setOpen}>
       <AppSidebar 
         variant={effectiveSidebarVariant} 
         collapsible={collapsible} 

@@ -60,6 +60,19 @@ export function KnowledgeBaseDialog({
   const [embeddingModels, setEmbeddingModels] = React.useState<ModelBrief[]>([])
   const [teams, setTeams] = React.useState<UserTeamInfo[]>([])
   
+  // 获取当前选中模型的名称
+  const selectedModelName = React.useMemo(() => {
+    if (!embeddingModelId) return null
+    // 先从模型列表中查找
+    const model = embeddingModels.find(m => m.id === embeddingModelId)
+    if (model) return model.name
+    // 编辑时，使用知识库自带的模型信息
+    if (knowledgeBase?.embedding_model?.name) {
+      return knowledgeBase.embedding_model.name
+    }
+    return null
+  }, [embeddingModelId, embeddingModels, knowledgeBase])
+  
   // 加载数据
   React.useEffect(() => {
     const loadData = async () => {
@@ -243,12 +256,14 @@ export function KnowledgeBaseDialog({
             {/* Embedding 模型 */}
             <div className="space-y-2">
               <Label htmlFor="embeddingModel">{t('embeddingModel')}</Label>
-              <Select value={embeddingModelId} onValueChange={setEmbeddingModelId}>
+              <Select 
+                value={embeddingModelId ?? undefined} 
+                onValueChange={setEmbeddingModelId}
+                disabled={isEditing}
+              >
                 <SelectTrigger id="embeddingModel" className="w-full">
                   <SelectValue>
-                    {embeddingModelId 
-                      ? embeddingModels.find(m => m.id === embeddingModelId)?.name 
-                      : t('selectEmbeddingModel')}
+                    {selectedModelName || t('selectEmbeddingModel')}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent side="bottom" alignItemWithTrigger={false}>
@@ -263,7 +278,9 @@ export function KnowledgeBaseDialog({
                   )}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">{t('embeddingModelHint')}</p>
+              <p className="text-xs text-muted-foreground">
+                {isEditing ? t('embeddingModelCannotChange') : t('embeddingModelHint')}
+              </p>
               {fieldErrors.embedding_model_id && (
                 <p className="text-sm text-destructive">{fieldErrors.embedding_model_id}</p>
               )}

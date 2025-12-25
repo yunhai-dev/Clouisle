@@ -5,11 +5,13 @@ import * as React from 'react'
 export type SidebarVariant = 'inset' | 'floating' | 'sidebar'
 export type LayoutVariant = 'default' | 'compact' | 'full'
 export type DirectionVariant = 'ltr' | 'rtl'
+export type PlatformHeaderVariant = 'default' | 'centered' | 'minimal'
 
 interface SettingsState {
   sidebarVariant: SidebarVariant
   layoutVariant: LayoutVariant
   direction: DirectionVariant
+  platformHeaderVariant: PlatformHeaderVariant
 }
 
 interface SettingsContextType extends SettingsState {
@@ -17,6 +19,7 @@ interface SettingsContextType extends SettingsState {
   setSidebarVariant: (variant: SidebarVariant) => void
   setLayoutVariant: (variant: LayoutVariant) => void
   setDirection: (direction: DirectionVariant) => void
+  setPlatformHeaderVariant: (variant: PlatformHeaderVariant) => void
   resetSettings: () => void
 }
 
@@ -24,6 +27,7 @@ const defaultSettings: SettingsState = {
   sidebarVariant: 'inset',
   layoutVariant: 'default',
   direction: 'ltr',
+  platformHeaderVariant: 'centered',
 }
 
 const SettingsContext = React.createContext<SettingsContextType | undefined>(undefined)
@@ -74,6 +78,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setSettings((prev) => ({ ...prev, direction }))
   }, [])
 
+  const setPlatformHeaderVariant = React.useCallback((variant: PlatformHeaderVariant) => {
+    setSettings((prev) => ({ ...prev, platformHeaderVariant: variant }))
+  }, [])
+
   const resetSettings = React.useCallback(() => {
     setSettings(defaultSettings)
   }, [])
@@ -85,9 +93,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setSidebarVariant,
       setLayoutVariant,
       setDirection,
+      setPlatformHeaderVariant,
       resetSettings,
     }),
-    [settings, mounted, setSidebarVariant, setLayoutVariant, setDirection, resetSettings]
+    [settings, mounted, setSidebarVariant, setLayoutVariant, setDirection, setPlatformHeaderVariant, resetSettings]
   )
 
   return (

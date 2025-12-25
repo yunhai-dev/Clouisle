@@ -190,3 +190,125 @@ export const modelsApi = {
     return api.post<Model>(`/models/${modelId}/set-default`)
   },
 }
+
+// ============ 团队模型授权 API ============
+
+export interface TeamModel {
+  id: string
+  team_id: string
+  model_id: string
+  model: ModelBrief
+  daily_token_limit: number | null
+  monthly_token_limit: number | null
+  daily_request_limit: number | null
+  monthly_request_limit: number | null
+  daily_tokens_used: number
+  monthly_tokens_used: number
+  daily_requests_used: number
+  monthly_requests_used: number
+  is_enabled: boolean
+  priority: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TeamModelCreateInput {
+  model_id: string
+  daily_token_limit?: number | null
+  monthly_token_limit?: number | null
+  daily_request_limit?: number | null
+  monthly_request_limit?: number | null
+  is_enabled?: boolean
+  priority?: number
+}
+
+export interface TeamModelUpdateInput {
+  daily_token_limit?: number | null
+  monthly_token_limit?: number | null
+  daily_request_limit?: number | null
+  monthly_request_limit?: number | null
+  is_enabled?: boolean
+  priority?: number
+}
+
+export interface TeamModelBatchCreateInput {
+  model_ids: string[]
+  daily_token_limit?: number | null
+  monthly_token_limit?: number | null
+  daily_request_limit?: number | null
+  monthly_request_limit?: number | null
+}
+
+export interface TeamModelQuotaStatus {
+  model_id: string
+  model_name: string
+  model_type: string
+  daily_token_limit: number | null
+  daily_tokens_used: number
+  daily_token_percent: number | null
+  monthly_token_limit: number | null
+  monthly_tokens_used: number
+  monthly_token_percent: number | null
+  is_enabled: boolean
+  is_quota_exceeded: boolean
+}
+
+export const teamModelsApi = {
+  /**
+   * 获取团队已授权的模型列表
+   */
+  getTeamModels: async (teamId: string, modelType?: string): Promise<TeamModel[]> => {
+    const params = modelType ? `?model_type=${modelType}` : ''
+    return api.get<TeamModel[]>(`/teams/${teamId}/models${params}`)
+  },
+
+  /**
+   * 为团队授权模型（仅超管）
+   */
+  addTeamModel: async (teamId: string, data: TeamModelCreateInput): Promise<TeamModel> => {
+    return api.post<TeamModel>(`/teams/${teamId}/models`, data)
+  },
+
+  /**
+   * 更新团队模型授权配置（仅超管）
+   */
+  updateTeamModel: async (teamId: string, modelId: string, data: TeamModelUpdateInput): Promise<TeamModel> => {
+    return api.put<TeamModel>(`/teams/${teamId}/models/${modelId}`, data)
+  },
+
+  /**
+   * 撤销团队模型授权（仅超管）
+   */
+  removeTeamModel: async (teamId: string, modelId: string): Promise<{ team_id: string; model_id: string }> => {
+    return api.delete<{ team_id: string; model_id: string }>(`/teams/${teamId}/models/${modelId}`)
+  },
+
+  /**
+   * 批量授权模型（仅超管）
+   */
+  batchAddTeamModels: async (teamId: string, data: TeamModelBatchCreateInput): Promise<TeamModel[]> => {
+    return api.post<TeamModel[]>(`/teams/${teamId}/models/batch`, data)
+  },
+
+  /**
+   * 批量撤销授权（仅超管）
+   */
+  batchRemoveTeamModels: async (teamId: string, modelIds: string[]): Promise<{ deleted_count: number }> => {
+    return api.delete<{ deleted_count: number }>(`/teams/${teamId}/models/batch`, { model_ids: modelIds })
+  },
+
+  /**
+   * 获取团队可用模型列表（中台使用）
+   */
+  getAvailableModels: async (teamId: string, modelType?: string): Promise<ModelBrief[]> => {
+    const params = modelType ? `?model_type=${modelType}` : ''
+    return api.get<ModelBrief[]>(`/teams/${teamId}/available-models${params}`)
+  },
+
+  /**
+   * 获取团队模型配额状态
+   */
+  getTeamModelsQuota: async (teamId: string): Promise<TeamModelQuotaStatus[]> => {
+    return api.get<TeamModelQuotaStatus[]>(`/teams/${teamId}/models/quota`)
+  },
+}

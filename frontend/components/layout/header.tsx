@@ -2,17 +2,15 @@
 
 import * as React from 'react'
 import { useTranslations } from 'next-intl'
-import { Search, Settings } from 'lucide-react'
+import { Search, Palette } from 'lucide-react'
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { SettingsDrawer } from '@/components/settings-drawer'
 
 export function Header() {
   const t = useTranslations('common')
-  const tSettings = useTranslations('settings')
   const [settingsOpen, setSettingsOpen] = React.useState(false)
 
   return (
@@ -34,16 +32,13 @@ export function Header() {
       </div>
 
       <div className="ms-auto flex items-center gap-1.5">
-        {/* Theme Toggle */}
-        <ThemeToggle />
-
         {/* Appearance Settings */}
         <button
           onClick={() => setSettingsOpen(true)}
-          className="rounded-md hover:bg-muted text-muted-foreground hover:text-foreground size-8 inline-flex items-center justify-center transition-colors"
-          title={tSettings('themeSettings')}
+          className="rounded-md hover:bg-muted text-muted-foreground hover:text-foreground size-8 inline-flex items-center justify-center transition-colors cursor-pointer"
+          title={t('appearanceSettings')}
         >
-          <Settings className="h-4 w-4" />
+          <Palette className="h-4 w-4" />
         </button>
       </div>
 

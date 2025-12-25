@@ -182,3 +182,107 @@ class ModelTestResponse(BaseModel):
     latency_ms: Optional[int] = Field(
         None, description="Response latency in milliseconds"
     )
+
+
+# ============ Team Model Authorization Schemas ============
+
+
+class TeamModelCreate(BaseModel):
+    """授权团队使用模型"""
+
+    model_id: UUID = Field(..., description="模型 ID")
+    daily_token_limit: Optional[int] = Field(
+        None, ge=0, description="每日 Token 限额，null 表示无限制"
+    )
+    monthly_token_limit: Optional[int] = Field(
+        None, ge=0, description="每月 Token 限额，null 表示无限制"
+    )
+    daily_request_limit: Optional[int] = Field(
+        None, ge=0, description="每日请求次数限额，null 表示无限制"
+    )
+    monthly_request_limit: Optional[int] = Field(
+        None, ge=0, description="每月请求次数限额，null 表示无限制"
+    )
+    is_enabled: bool = Field(True, description="是否启用")
+    priority: int = Field(0, description="优先级")
+
+
+class TeamModelUpdate(BaseModel):
+    """更新团队模型授权配置"""
+
+    daily_token_limit: Optional[int] = Field(None, ge=0)
+    monthly_token_limit: Optional[int] = Field(None, ge=0)
+    daily_request_limit: Optional[int] = Field(None, ge=0)
+    monthly_request_limit: Optional[int] = Field(None, ge=0)
+    is_enabled: Optional[bool] = None
+    priority: Optional[int] = None
+
+
+class TeamModelBatchCreate(BaseModel):
+    """批量授权模型"""
+
+    model_ids: list[UUID] = Field(..., min_length=1, description="模型 ID 列表")
+    daily_token_limit: Optional[int] = Field(None, ge=0)
+    monthly_token_limit: Optional[int] = Field(None, ge=0)
+    daily_request_limit: Optional[int] = Field(None, ge=0)
+    monthly_request_limit: Optional[int] = Field(None, ge=0)
+
+
+class TeamModelBatchDelete(BaseModel):
+    """批量撤销授权"""
+
+    model_ids: list[UUID] = Field(..., min_length=1, description="模型 ID 列表")
+
+
+class TeamModelResponse(BaseModel):
+    """团队模型授权响应"""
+
+    id: UUID
+    team_id: UUID
+    model_id: UUID
+    model: ModelBrief = Field(..., description="模型信息")
+
+    # 配额设置
+    daily_token_limit: Optional[int] = None
+    monthly_token_limit: Optional[int] = None
+    daily_request_limit: Optional[int] = None
+    monthly_request_limit: Optional[int] = None
+
+    # 当前用量
+    daily_tokens_used: int = 0
+    monthly_tokens_used: int = 0
+    daily_requests_used: int = 0
+    monthly_requests_used: int = 0
+
+    # 状态
+    is_enabled: bool
+    priority: int
+
+    # 时间戳
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TeamModelQuotaStatus(BaseModel):
+    """团队模型配额状态"""
+
+    model_id: UUID
+    model_name: str
+    model_type: str
+
+    # 每日配额
+    daily_token_limit: Optional[int] = None
+    daily_tokens_used: int = 0
+    daily_token_percent: Optional[float] = None
+
+    # 每月配额
+    monthly_token_limit: Optional[int] = None
+    monthly_tokens_used: int = 0
+    monthly_token_percent: Optional[float] = None
+
+    # 状态
+    is_enabled: bool
+    is_quota_exceeded: bool = False

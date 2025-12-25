@@ -16,7 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ImageUpload } from '@/components/ui/image-upload'
 
 interface TeamDialogProps {
   open: boolean
@@ -102,14 +102,21 @@ export function TeamDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 头像预览 */}
-          <div className="flex justify-center">
-            <Avatar className="h-20 w-20">
-              <AvatarImage src={avatarUrl || undefined} />
-              <AvatarFallback className="text-xl bg-primary text-primary-foreground">
-                {getTeamInitials(name)}
-              </AvatarFallback>
-            </Avatar>
+          {/* 头像上传 */}
+          <div className="flex flex-col items-center gap-2">
+            <Label>{t('avatar')}</Label>
+            <ImageUpload
+              value={avatarUrl}
+              onChange={setAvatarUrl}
+              previewSize="lg"
+              category="avatars"
+              placeholder={
+                <span className="text-xl font-semibold text-muted-foreground">
+                  {getTeamInitials(name)}
+                </span>
+              }
+            />
+            <p className="text-xs text-muted-foreground">{t('avatarHint')}</p>
           </div>
 
           <div className="space-y-2">
@@ -133,17 +140,6 @@ export function TeamDialog({
               className="resize-none"
               rows={3}
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="avatarUrl">{t('avatarUrl')}</Label>
-            <Input
-              id="avatarUrl"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder={t('avatarUrlPlaceholder')}
-            />
-            <p className="text-xs text-muted-foreground">{t('avatarUrlDescription')}</p>
           </div>
 
           <DialogFooter>

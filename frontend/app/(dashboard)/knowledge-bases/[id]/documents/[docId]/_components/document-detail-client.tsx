@@ -38,7 +38,6 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   AlertDialog,
@@ -172,7 +171,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
           setDocument(docData)
           if (docData.status === 'completed') {
             toast.success(t('documentProcessed'))
-          } else if (docData.status === 'failed') {
+          } else if (docData.status === 'error') {
             toast.error(t('documentProcessFailed'))
           }
         } catch {
@@ -209,7 +208,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
             {t('statusPending')}
           </Badge>
         )
-      case 'failed':
+      case 'error':
         return (
           <Badge variant="destructive" className="gap-1">
             <XCircle className="h-3 w-3" />
@@ -296,20 +295,10 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
     setPreviewStats(null)
   }
 
-  // 重新处理
-  const handleReprocess = async () => {
+  // 重新处理 - 跳转到预览编辑器页面
+  const handleReprocess = () => {
     if (!document) return
-
-    setIsProcessing(true)
-    try {
-      await knowledgeBasesApi.reprocessDocument(knowledgeBaseId, documentId)
-      toast.success(t('documentReprocessing'))
-      await loadData()
-    } catch {
-      // 错误已由 API 客户端处理
-    } finally {
-      setIsProcessing(false)
-    }
+    router.push(`/knowledge-bases/${knowledgeBaseId}/documents/preview?docs=${documentId}`)
   }
 
   // 删除文档
@@ -411,15 +400,15 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
   const isPending = document.status === 'pending'
   const isCompleted = document.status === 'completed'
-  const isFailed = document.status === 'failed'
+  const isFailed = document.status === 'error'
   const isProcessingStatus = document.status === 'processing'
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden gap-4 p-4">
       {/* 左侧：分块列表 */}
-      <div className="flex-1 min-w-0 flex flex-col border-r overflow-hidden">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden rounded-xl border bg-card">
         {/* 头部 */}
-        <div className="flex items-center justify-between p-4 border-b bg-background">
+        <div className="flex items-center justify-between p-4 bg-muted/30">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.push(`/knowledge-bases/${knowledgeBaseId}`)}>
               <ArrowLeft className="h-4 w-4" />
@@ -441,7 +430,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
           <div className="flex items-center gap-2 shrink-0">
             {(isCompleted || isFailed) && (
-              <Button variant="outline" size="sm" onClick={handleReprocess} disabled={isProcessing}>
+              <Button variant="outline" size="sm" onClick={handleReprocess}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 {t('reprocess')}
               </Button>
@@ -675,7 +664,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
               {/* 分页 */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between p-4 border-t bg-background">
+                <div className="flex items-center justify-between p-4 bg-muted/30">
                   <span className="text-sm text-muted-foreground">
                     {t('pageInfo', { page, total: totalPages })}
                   </span>
@@ -707,8 +696,8 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
       </div>
 
       {/* 右侧：设置面板 */}
-      <div className="w-80 shrink-0 flex flex-col bg-muted/30">
-        <div className="p-4 border-b">
+      <div className="w-80 shrink-0 min-h-0 flex flex-col rounded-xl border bg-card overflow-hidden">
+        <div className="p-4 bg-muted/30">
           <h2 className="font-semibold flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
             {t('chunkSettings')}
@@ -716,7 +705,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
         </div>
 
         <ScrollArea className="flex-1">
-          <div className="p-4 space-y-6">
+          <div className="p-4 space-y-5">
             {/* 分块参数 */}
             <div className="space-y-4">
               <div className="grid gap-2">
@@ -796,10 +785,8 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
             {isPending && (
               <>
-                <Separator />
-
                 {/* 提示信息 */}
-                <div className="rounded-lg border p-3 bg-blue-500/10 border-blue-500/30">
+                <div className="rounded-lg p-3 bg-blue-500/10 border border-blue-500/20">
                   <div className="flex gap-2">
                     <AlertTriangle className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground">
@@ -852,10 +839,8 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
             {isCompleted && (
               <>
-                <Separator />
-
                 {/* 重新分块提示 */}
-                <div className="rounded-lg border p-3 bg-amber-500/10 border-amber-500/30">
+                <div className="rounded-lg p-3 bg-amber-500/10 border border-amber-500/20">
                   <div className="flex gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                     <div>
@@ -907,10 +892,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{commonT('cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={deleteChunk}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogAction variant="destructive" onClick={deleteChunk}>
               {commonT('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -153,7 +153,9 @@ class Document(models.Model):
         default=DocumentStatus.PENDING.value,
         description="Processing status",
     )
-    error_message = fields.TextField(null=True, description="Error message if failed")
+    error_message: str | None = fields.TextField(
+        null=True, description="Error message if failed"
+    )
 
     # Processing results
     chunk_count = fields.IntField(default=0, description="Number of chunks")

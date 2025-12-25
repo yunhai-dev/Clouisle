@@ -24,6 +24,7 @@ import {
   Settings2,
   Play,
   Download,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { knowledgeBasesApi, type Document, type PageData, type DocumentStatus, type DocumentType } from '@/lib/api'
@@ -182,7 +183,7 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
     { value: 'pending', label: t('statusPending') },
     { value: 'processing', label: t('statusProcessing') },
     { value: 'completed', label: t('statusCompleted') },
-    { value: 'failed', label: t('statusFailed') },
+    { value: 'error', label: t('statusFailed') },
   ]
   
   // 类型选项
@@ -240,15 +241,9 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
     }
   }
   
-  // 重新处理
-  const handleReprocess = async (doc: Document) => {
-    try {
-      await knowledgeBasesApi.reprocessDocument(knowledgeBaseId, doc.id)
-      toast.success(t('documentReprocessing'))
-      loadDocuments()
-    } catch {
-      // 错误已由 API 客户端处理
-    }
+  // 重新处理 - 跳转到预览编辑器页面
+  const handleReprocess = (doc: Document) => {
+    router.push(`/knowledge-bases/${knowledgeBaseId}/documents/preview?docs=${doc.id}`)
   }
   
   // 配置文档（跳转到详情页）
@@ -273,10 +268,13 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
   }
   
   // 下载原文件
-  const handleDownload = (doc: Document) => {
-    const downloadUrl = knowledgeBasesApi.getDocumentDownloadUrl(knowledgeBaseId, doc.id)
-    // 在新窗口打开下载链接
-    window.open(downloadUrl, '_blank')
+  const handleDownload = async (doc: Document) => {
+    try {
+      await knowledgeBasesApi.downloadDocument(knowledgeBaseId, doc.id, doc.name)
+      toast.success(t('downloadStarted'))
+    } catch {
+      toast.error(t('downloadFailed'))
+    }
   }
   
   // 批量删除
@@ -296,8 +294,8 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
   }
   
   // 格式化文件大小
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B'
+  const formatSize = (bytes: number | null | undefined) => {
+    if (bytes === null || bytes === undefined || bytes === 0) return '-'
     const k = 1024
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -328,7 +326,7 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
             {t('statusPending')}
           </Badge>
         )
-      case 'failed':
+      case 'error':
         return (
           <Badge variant="destructive" className="gap-1">
             <XCircle className="h-3 w-3" />
@@ -478,7 +476,7 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
                           </DropdownMenuItem>
                         )}
                         
-                        {(doc.status === 'failed' || doc.status === 'completed') && (
+                        {(doc.status === 'error' || doc.status === 'completed') && (
                           <DropdownMenuItem onClick={() => handleReprocess(doc)}>
                             <RefreshCw className="mr-2 h-4 w-4" />
                             {t('reprocess')}
@@ -489,6 +487,13 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
                           <DropdownMenuItem onClick={() => handleDownload(doc)}>
                             <Download className="mr-2 h-4 w-4" />
                             {t('downloadOriginal')}
+                          </DropdownMenuItem>
+                        )}
+                        
+                        {doc.source_url && doc.doc_type === 'url' && (
+                          <DropdownMenuItem onClick={() => window.open(doc.source_url!, '_blank')}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            {t('viewSourceUrl')}
                           </DropdownMenuItem>
                         )}
                         

@@ -309,17 +309,132 @@ dependencies = [
 
 ## 9. 实现状态
 
-| 功能 | 状态 |
-|------|------|
-| 数据模型 | ✅ 完成 |
-| API 端点 | ✅ 完成 |
-| 文档上传 | ✅ 完成 |
-| URL 导入 | ✅ 完成 |
-| 文本提取 (MarkItDown) | ✅ 完成 |
-| 文本分块 | ✅ 完成 |
-| Celery 异步任务 | ✅ 完成 |
-| 向量生成 | ✅ 完成 |
-| pgvector 存储 | 🔲 待实现 |
-| 语义搜索 | 🔲 待实现 |
-| 混合搜索 | 🔲 规划中 |
-| 前端 UI | 🔲 待实现 |
+| 功能 | 状态 | 实现细节 |
+|------|------|----------|
+| 数据模型 | ✅ 完成 | KnowledgeBase, Document, DocumentChunk |
+| API 端点 | ✅ 完成 | 完整 CRUD + 搜索 + 下载 |
+| 文档上传 | ✅ 完成 | 多格式支持，存储路径 `uploads/documents/{kb_id}/{YYYY}/{MM}/` |
+| URL 导入 | ✅ 完成 | MarkItDown 抓取网页内容 |
+| 文本提取 (MarkItDown) | ✅ 完成 | PDF, DOCX, HTML, XLSX 等 |
+| 文本分块 | ✅ 完成 | 支持 chunk_size, chunk_overlap, separator 配置 |
+| Celery 异步任务 | ✅ 完成 | 后台处理大文档 |
+| 向量生成 | ✅ 完成 | 通过 embedding_model 配置 |
+| pgvector 存储 | 🔲 待实现 | 当前使用关键词匹配 |
+| 语义搜索 | 🔲 待实现 | 当前使用 jieba 分词 + ILIKE 关键词匹配 |
+| 混合搜索 | ✅ 完成 | RRF 融合算法 (当前基于关键词) |
+| 文档下载 | ✅ 完成 | Authorization Bearer Token 鉴权 |
+| 前端 UI (后台) | ✅ 完成 | 完整的知识库管理界面 |
+| 前端 UI (中台) | ✅ 完成 | 平台级知识库管理 |
+| 搜索测试页面 | ✅ 完成 | 圆角胶囊式搜索栏，Popover 高级设置 |
+
+---
+
+## 10. 实现细节
+
+### 10.1 文档列表 Schema
+
+`DocumentList` schema 返回以下字段用于前端展示：
+
+```python
+class DocumentList(BaseModel):
+    id: UUID
+    name: str
+    doc_type: str
+    file_path: Optional[str] = None      # 文件存储路径，用于下载
+    file_size: Optional[int] = None
+    source_url: Optional[str] = None     # URL 类型文档的源链接
+    status: str
+    error_message: Optional[str] = None  # 处理失败时的错误信息
+    chunk_count: int
+    token_count: int
+    created_at: datetime
+```
+
+### 10.2 文档下载 API
+
+```
+GET /api/v1/knowledge-bases/{kb_id}/documents/{doc_id}/download
+Authorization: Bearer <token>
+```
+
+实现要点：
+- 需要 Bearer Token 鉴权
+- 返回原始上传文件
+- 前端使用 `fetch` + `blob` + `createObjectURL` 触发下载
+
+```typescript
+// frontend/lib/api/knowledge-bases.ts
+downloadDocument: async (kbId: string, docId: string, filename: string) => {
+  const token = localStorage.getItem('access_token')
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  const blob = await response.blob()
+  // 创建临时下载链接
+  const link = document.createElement('a')
+  link.href = window.URL.createObjectURL(blob)
+  link.download = filename
+  link.click()
+}
+```
+
+### 10.3 搜索测试 UI
+
+搜索测试页面采用现代 AI 聊天应用风格：
+
+**布局结构**：
+```
+┌────────────────────────────────┐
+│  ← 命中测试                    │  页头 (无分割线)
+│    知识库名称                  │
+├────────────────────────────────┤
+│                                │
+│       搜索结果区域             │  flex-1 可滚动
+│       (可折叠卡片)             │
+│                                │
+├────────────────────────────────┤
+│ ╭──────────────────────────╮   │  底部搜索栏 (sticky)
+│ │ 🔍 输入搜索内容...  ⚙️ ➤ │   │  圆角胶囊样式
+│ ╰──────────────────────────╯   │
+└────────────────────────────────┘
+```
+
+**高级设置 Popover**：
+- 检索方式: 混合检索 / 向量检索 / 全文检索 (ToggleGroup)
+- 最大结果数: 1-20 (number input)
+- 相似度阈值: 0-1 (text input with decimal support)
+
+**关键实现**：
+```tsx
+// 中文 IME 组合状态检测，避免回车误触发
+const handleKeyDown = (e: React.KeyboardEvent) => {
+  if (e.nativeEvent.isComposing) return
+  if (e.key === 'Enter') handleSearch()
+}
+
+// 小数输入支持
+const [thresholdInput, setThresholdInput] = useState('0')
+onChange={(e) => {
+  const val = e.target.value
+  if (val === '' || /^\d*\.?\d*$/.test(val)) {
+    setThresholdInput(val)
+  }
+}}
+
+// 中台高度计算 (平台 Header 64px)
+<div style={{ height: 'calc(100vh - 64px)' }}>
+```
+
+### 10.4 文件存储路径
+
+文档上传后存储在：
+```
+uploads/documents/{knowledge_base_id}/{YYYY}/{MM}/{filename}
+```
+
+路径计算 (backend/app/services/document_processor.py):
+```python
+# 项目根目录 = backend 的父目录
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+uploads_dir = project_root / "uploads" / "documents"
+```

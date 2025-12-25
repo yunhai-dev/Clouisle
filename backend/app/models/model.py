@@ -4,8 +4,13 @@ Supports various model types: chat, embedding, text-to-image, text-to-video, etc
 """
 
 from enum import Enum
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from tortoise import fields, models
+
+if TYPE_CHECKING:
+    from .user import Team
 
 
 class ModelProvider(str, Enum):
@@ -250,3 +255,65 @@ class Model(models.Model):
             return None
         except ValueError:
             return None
+
+
+class TeamModel(models.Model):
+    """
+    团队模型授权表 - 定义团队可使用的模型及配额
+
+    关联 Team 和 Model，支持配额限制和用量追踪。
+    """
+
+    id = fields.UUIDField(pk=True)
+
+    # 关联关系
+    team: fields.ForeignKeyRelation["Team"] = fields.ForeignKeyField(
+        "models.Team", related_name="model_authorizations", on_delete=fields.CASCADE
+    )
+    model: fields.ForeignKeyRelation[Model] = fields.ForeignKeyField(
+        "models.Model", related_name="team_authorizations", on_delete=fields.CASCADE
+    )
+
+    # Tortoise ORM 自动生成的 FK ID 字段（为 mypy 添加类型注解）
+    team_id: UUID
+    model_id: UUID
+
+    # 配额设置 (null = 无限制)
+    daily_token_limit = fields.BigIntField(
+        null=True, description="每日 Token 限额，null 表示无限制"
+    )
+    monthly_token_limit = fields.BigIntField(
+        null=True, description="每月 Token 限额，null 表示无限制"
+    )
+    daily_request_limit = fields.IntField(
+        null=True, description="每日请求次数限额，null 表示无限制"
+    )
+    monthly_request_limit = fields.IntField(
+        null=True, description="每月请求次数限额，null 表示无限制"
+    )
+
+    # 当前用量
+    daily_tokens_used = fields.BigIntField(default=0, description="当日已使用 Token")
+    monthly_tokens_used = fields.BigIntField(default=0, description="当月已使用 Token")
+    daily_requests_used = fields.IntField(default=0, description="当日请求次数")
+    monthly_requests_used = fields.IntField(default=0, description="当月请求次数")
+
+    # 用量重置时间
+    daily_reset_at = fields.DatetimeField(null=True, description="每日用量重置时间")
+    monthly_reset_at = fields.DatetimeField(null=True, description="每月用量重置时间")
+
+    # 状态
+    is_enabled = fields.BooleanField(default=True, description="是否启用此授权")
+    priority = fields.IntField(default=0, description="优先级，用于同类型模型排序")
+
+    # 时间戳
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "team_models"
+        unique_together = (("team", "model"),)
+        ordering = ["-priority", "created_at"]
+
+    def __str__(self):
+        return f"TeamModel({self.team_id} -> {self.model_id})"

@@ -5,7 +5,22 @@ export { rolesApi, permissionsApi, type Role, type Permission, type RoleCreateIn
 export { teamsApi, type Team, type TeamWithMembers, type TeamMember, type UserTeamInfo, type TeamCreateInput, type TeamUpdateInput, type TeamMemberAddInput, type TeamMemberUpdateInput } from './teams'
 export { siteSettingsApi, type SiteSetting, type SiteSettings, type PublicSiteSettings, type GeneralSettings, type SecuritySettings, type EmailSettings } from './site-settings'
 export { uploadApi, type UploadResult } from './upload'
-export { modelsApi, type Model, type ModelBrief, type ModelCreateInput, type ModelUpdateInput, type ModelQueryParams, type ProviderInfo, type ModelTypeInfo } from './models'
+export { 
+  modelsApi, 
+  teamModelsApi,
+  type Model, 
+  type ModelBrief, 
+  type ModelCreateInput, 
+  type ModelUpdateInput, 
+  type ModelQueryParams, 
+  type ProviderInfo, 
+  type ModelTypeInfo,
+  type TeamModel,
+  type TeamModelCreateInput,
+  type TeamModelUpdateInput,
+  type TeamModelBatchCreateInput,
+  type TeamModelQuotaStatus,
+} from './models'
 export { 
   knowledgeBasesApi, 
   type KnowledgeBase, 

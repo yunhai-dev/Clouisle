@@ -30,7 +30,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -241,7 +240,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
       }))
       
       // 检查返回的文档状态
-      if (result.status === 'failed') {
+      if (result.status === 'error') {
         toast.error(result.error_message || t('documentProcessFailed'))
       } else {
         // processing 或其他状态都表示任务已提交
@@ -268,10 +267,11 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
 
   // 处理全部文档
   const handleProcessAll = async () => {
-    // 只处理有预览分块的待处理文档
+    // 处理有预览分块的文档（pending, completed, error 状态都可以）
+    // 只跳过 processing 状态的文档
     const docsToProcess = Object.entries(documentsState)
       .filter(([, state]) => 
-        state.document?.status === 'pending' && 
+        state.document?.status !== 'processing' && 
         state.previewChunks && 
         state.previewChunks.length > 0
       )
@@ -504,11 +504,11 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
   }
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex gap-4 p-4">
       {/* 左侧：文档 Tab 和预览内容 */}
-      <div className="flex-1 min-w-0 flex flex-col border-r">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col rounded-xl border bg-card overflow-hidden">
         {/* 头部 */}
-        <div className="shrink-0 flex items-center justify-between p-4 border-b bg-background">
+        <div className="shrink-0 flex items-center justify-between p-4 bg-muted/30">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <Button 
               variant="ghost" 
@@ -530,7 +530,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
         </div>
 
         {/* 文档 Tab 栏 */}
-        <div className="shrink-0 border-b px-4 overflow-x-auto bg-background">
+        <div className="shrink-0 border-t px-4 overflow-x-auto bg-muted/20">
           <div className="flex h-12 items-center gap-1">
             {validDocuments.map(([docId, state]) => (
               <button
@@ -695,7 +695,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
                             <Textarea
                               value={editingContent}
                               onChange={(e) => setEditingContent(e.target.value)}
-                              className="min-h-[200px] text-sm font-mono"
+                              className="min-h-50 text-sm font-mono"
                               placeholder={t('chunkContentPlaceholder')}
                               autoFocus
                             />
@@ -723,7 +723,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm whitespace-pre-wrap break-all [overflow-wrap:anywhere]">
+                          <p className="text-sm whitespace-pre-wrap break-all wrap-anywhere">
                             {chunk.content}
                           </p>
                         )}
@@ -738,15 +738,15 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
       </div>
 
       {/* 右侧：设置面板 - 固定 */}
-      <div className="w-80 shrink-0 flex flex-col bg-muted/30">
-        <div className="shrink-0 p-4 border-b">
+      <div className="w-80 shrink-0 min-h-0 flex flex-col rounded-xl border bg-card overflow-hidden">
+        <div className="shrink-0 p-4 bg-muted/30">
           <h2 className="font-semibold flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
             {t('chunkSettings')}
           </h2>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-auto p-4 space-y-6">
+        <div className="flex-1 min-h-0 overflow-auto p-4 space-y-5">
           {/* 分块参数 */}
           <div className="space-y-4">
             <div className="grid gap-2">
@@ -823,10 +823,8 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
             </div>
           </div>
 
-          <Separator />
-
           {/* 提示信息 */}
-          <div className="rounded-lg border p-3 bg-blue-500/10 border-blue-500/30">
+          <div className="rounded-lg p-3 bg-blue-500/10 border border-blue-500/20">
             <div className="flex gap-2">
               <AlertTriangle className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground">

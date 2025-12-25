@@ -9,9 +9,9 @@ export default async function DocumentDetailPage({
   const { id, docId } = await params
   
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-svh flex-col overflow-hidden">
       <Header />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <DocumentDetailClient knowledgeBaseId={id} documentId={docId} />
       </div>
     </div>

@@ -540,10 +540,7 @@ export function ChunkEditorDialog({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{commonT('cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={deleteChunk}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogAction variant="destructive" onClick={deleteChunk}>
               {commonT('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>

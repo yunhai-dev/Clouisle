@@ -24,7 +24,8 @@
     "clearFilters": "清除筛选",
     "uploadSuccess": "上传成功",
     "invalidFileType": "不支持的文件类型",
-    "fileTooLarge": "文件过大，最大支持 10MB"
+    "fileTooLarge": "文件过大，最大支持 10MB",
+    "status": "状态"
   },
   "nav": {
     "general": "通用",
@@ -123,9 +124,8 @@
     "teamNamePlaceholder": "输入团队名称",
     "teamDescription": "团队描述",
     "teamDescriptionPlaceholder": "输入团队描述（可选）",
-    "avatarUrl": "头像 URL",
-    "avatarUrlPlaceholder": "输入头像图片 URL",
-    "avatarUrlDescription": "可选：输入团队头像的 URL",
+    "avatar": "团队头像",
+    "avatarHint": "推荐：200x200 像素，支持 JPG、PNG 格式",
     "noDescription": "暂无描述",
     "defaultTeam": "默认团队",
     "members": "成员",
@@ -169,7 +169,37 @@
     "bulkDeleted": "成功删除 {count} 个团队",
     "teamNotFound": "团队不存在",
     "searchUsers": "搜索用户...",
-    "noUsersFound": "未找到用户"
+    "noUsersFound": "未找到用户",
+    "modelAuth": "模型授权",
+    "authorizedModels": "已授权模型",
+    "addModel": "授权模型",
+    "searchModels": "搜索模型...",
+    "noModelsFound": "未找到模型",
+    "allModelsAuthorized": "所有模型已授权",
+    "noModelsAuthorized": "暂无已授权模型",
+    "addModelHint": "点击上方按钮授权模型",
+    "authorizeModel": "授权",
+    "authorizeModels": "授权 {count} 个模型",
+    "selectAll": "全选",
+    "selectedCount": "已选 {count} 个",
+    "modelAuthorized": "模型授权成功",
+    "modelsAuthorized": "成功授权 {count} 个模型",
+    "modelAuthUpdated": "授权配置更新成功",
+    "modelAuthRevoked": "模型授权已撤销",
+    "editModelAuth": "编辑授权配置",
+    "quotaSettings": "配额设置",
+    "dailyQuota": "每日配额",
+    "monthlyQuota": "每月配额",
+    "dailyTokenLimit": "每日 Token 限额",
+    "monthlyTokenLimit": "每月 Token 限额",
+    "dailyRequestLimit": "每日请求限额",
+    "monthlyRequestLimit": "每月请求限额",
+    "unlimited": "无限制",
+    "priority": "优先级",
+    "priorityHint": "数值越大优先级越高，同类型模型按优先级排序",
+    "revokeModelAuth": "撤销授权",
+    "revokeModelAuthConfirm": "确定要撤销 \"{name}\" 的授权吗？该团队将无法再使用此模型。",
+    "revoke": "撤销"
   },
   "users": {
     "title": "用户列表",
@@ -354,6 +384,10 @@
     "directionRTL": "从右到左",
     "reset": "重置",
     "language": "语言",
+    "headerLayout": "导航布局",
+    "headerDefault": "默认",
+    "headerCentered": "居中",
+    "headerMinimal": "极简",
     "languageDescription": "选择您的首选语言"
   },
   "siteSettings": {
@@ -581,6 +615,8 @@
       "midjourney": "Midjourney",
       "custom": "自定义"
     },
+    "name": "模型名称",
+    "type": "模型类型",
     "modelTypes": {
       "chat": "对话模型",
       "embedding": "嵌入模型",
@@ -590,6 +626,63 @@
       "text_to_image": "文生图",
       "text_to_video": "文生视频",
       "image_to_video": "图生视频"
+    },
+    "types": {
+      "chat": "对话",
+      "embedding": "嵌入",
+      "rerank": "重排序",
+      "tts": "语音合成",
+      "stt": "语音识别",
+      "text_to_image": "文生图",
+      "text_to_video": "文生视频",
+      "image_to_video": "图生视频"
+    }
+  },
+  "platform": {
+    "nav": {
+      "workspace": "应用",
+      "kb": "知识库",
+      "tools": "工具",
+      "models": "模型"
+    },
+    "profile": "个人资料",
+    "settings": "设置",
+    "logout": "退出登录",
+    "logoutSuccess": "已成功退出登录",
+    "teams": "团队",
+    "manageTeams": "管理团队",
+    "noTeams": "暂无团队",
+    "workspace": {
+      "title": "应用工作台",
+      "description": "创建和管理您的 AI 应用",
+      "createApp": "创建应用",
+      "noApps": "暂无应用",
+      "createAppHint": "创建您的第一个 AI 应用来开始使用",
+      "createFirstApp": "创建第一个应用"
+    },
+    "kb": {
+      "title": "知识库",
+      "description": "管理您的知识库和文档",
+      "createKb": "创建知识库",
+      "noKbs": "暂无知识库",
+      "createKbHint": "创建知识库以存储和检索信息",
+      "createFirstKb": "创建第一个知识库"
+    },
+    "tools": {
+      "title": "工具中心",
+      "description": "管理和配置可用的工具",
+      "createTool": "创建工具",
+      "noTools": "暂无工具",
+      "createToolHint": "添加工具以扩展 AI 应用的能力",
+      "createFirstTool": "创建第一个工具"
+    },
+    "models": {
+      "title": "模型管理",
+      "description": "配置和管理 AI 模型",
+      "createModel": "添加模型",
+      "noModels": "暂无模型",
+      "createModelHint": "添加 AI 模型以支持您的应用",
+      "createFirstModel": "添加第一个模型"
     }
   },
   "knowledgeBases": {
@@ -610,6 +703,7 @@
     "embeddingModel": "嵌入模型",
     "selectEmbeddingModel": "选择嵌入模型",
     "embeddingModelHint": "用于生成文档嵌入向量的模型",
+    "embeddingModelCannotChange": "创建后无法更换嵌入模型",
     "noEmbeddingModels": "暂无可用的嵌入模型",
     "chunkSize": "分块大小",
     "chunkSizeHint": "目标分块大小（token数）",
@@ -630,6 +724,7 @@
     "documentsDescription": "管理该知识库中的文档",
     "chunks": "分块",
     "createdAt": "创建时间",
+    "createdBy": "创建人",
     "filterKbs": "搜索知识库...",
     "noKbs": "暂无知识库",
     "createKbHint": "点击上方按钮创建您的第一个知识库",
@@ -683,6 +778,9 @@
     "bulkDocumentsDeleted": "成功删除 {count} 个文档",
     "reprocess": "重新处理",
     "downloadOriginal": "下载原文件",
+    "viewSourceUrl": "查看源网址",
+    "downloadStarted": "下载已开始",
+    "downloadFailed": "文件下载失败",
     "documentReprocessing": "文档已加入重新处理队列",
     "viewChunks": "编辑分块",
     "documentChunks": "文档分块",
@@ -772,6 +870,7 @@
     "noResultsHint": "尝试调整查询内容或降低相似度阈值",
     "searchResultsCount": "找到 {count} 条结果",
     "similarity": "相似度",
+    "searchMode": "检索方式",
     "hybridSearch": "混合检索",
     "vectorSearch": "向量检索",
     "fulltextSearch": "全文检索",
