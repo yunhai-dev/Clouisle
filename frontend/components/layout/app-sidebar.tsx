@@ -19,6 +19,7 @@ import {
   Globe,
   Bot,
   Database,
+  AppWindow,
 } from 'lucide-react'
 import { authApi, type User } from '@/lib/api'
 import { useSiteSettings } from '@/contexts/site-settings-context'
@@ -277,6 +278,12 @@ export function AppSidebar({ variant = 'inset', collapsible = 'icon', side = 'le
                 align="start"
                 sideOffset={4}
               >
+                <Link href="/app">
+                  <DropdownMenuItem>
+                    <AppWindow className="mr-2 h-4 w-4" />
+                    {t('workspace')}
+                  </DropdownMenuItem>
+                </Link>
                 <Link href="/settings/profile">
                   <DropdownMenuItem>
                     <Settings className="mr-2 h-4 w-4" />

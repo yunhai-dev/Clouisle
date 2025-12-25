@@ -38,6 +38,7 @@
     "roles": "角色",
     "permissions": "权限",
     "models": "模型",
+    "workspace": "工作台",
     "settings": "设置",
     "siteSettings": "站点设置",
     "helpCenter": "帮助中心",
@@ -188,6 +189,9 @@
     "modelAuthRevoked": "模型授权已撤销",
     "editModelAuth": "编辑授权配置",
     "quotaSettings": "配额设置",
+    "tokenQuota": "Token 配额",
+    "requestQuota": "请求配额",
+    "percentUsed": "{percent}% 已使用",
     "dailyQuota": "每日配额",
     "monthlyQuota": "每月配额",
     "dailyTokenLimit": "每日 Token 限额",
@@ -640,18 +644,55 @@
   },
   "platform": {
     "nav": {
+      "home": "首页",
       "workspace": "应用",
       "kb": "知识库",
       "tools": "工具",
       "models": "模型"
     },
     "profile": "个人资料",
-    "settings": "设置",
+    "admin": "后台管理",
     "logout": "退出登录",
     "logoutSuccess": "已成功退出登录",
     "teams": "团队",
     "manageTeams": "管理团队",
     "noTeams": "暂无团队",
+    "profile": {
+      "title": "个人资料",
+      "teamsDescription": "您已加入 {count} 个团队"
+    },
+    "home": {
+      "title": "控制台",
+      "welcome": "欢迎回来，{name}",
+      "welcomeDefault": "欢迎使用 Clouisle",
+      "description": "您可以在这里管理 AI 应用、知识库、工具和模型",
+      "stats": {
+        "knowledgeBases": "知识库",
+        "models": "可用模型",
+        "tools": "工具",
+        "apps": "应用"
+      },
+      "quickStart": "快速开始",
+      "quickStartDescription": "选择一个功能开始使用",
+      "features": {
+        "workspace": {
+          "title": "应用工作台",
+          "description": "创建和管理您的 AI 应用"
+        },
+        "kb": {
+          "title": "知识库",
+          "description": "上传文档并创建知识库"
+        },
+        "tools": {
+          "title": "工具中心",
+          "description": "配置和管理可用的工具"
+        },
+        "models": {
+          "title": "模型管理",
+          "description": "查看和管理可用的 AI 模型"
+        }
+      }
+    },
     "workspace": {
       "title": "应用工作台",
       "description": "创建和管理您的 AI 应用",

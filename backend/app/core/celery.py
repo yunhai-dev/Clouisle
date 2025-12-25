@@ -3,6 +3,7 @@ Celery application configuration for Clouisle backend.
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 
 from app.core.config import settings
@@ -17,6 +18,7 @@ celery_app = Celery(
     backend=f"{REDIS_URL}/1",
     include=[
         "app.tasks.knowledge_base",
+        "app.tasks.usage",
     ],
 )
 
@@ -43,6 +45,21 @@ celery_app.conf.update(
 # Optional: Configure task routes
 celery_app.conf.task_routes = {
     "app.tasks.knowledge_base.*": {"queue": "default"},
+    "app.tasks.usage.*": {"queue": "default"},
+}
+
+# Beat schedule for periodic tasks
+celery_app.conf.beat_schedule = {
+    # Reset daily usage every day at 00:00
+    "reset-daily-usage": {
+        "task": "tasks.reset_daily_usage",
+        "schedule": crontab(hour=0, minute=0),
+    },
+    # Reset monthly usage on the 1st of each month at 00:05
+    "reset-monthly-usage": {
+        "task": "tasks.reset_monthly_usage",
+        "schedule": crontab(hour=0, minute=5, day_of_month=1),
+    },
 }
 
 

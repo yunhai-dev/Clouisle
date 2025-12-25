@@ -108,11 +108,15 @@ def process_document_task(self, document_id: str) -> dict:
             if not chunks:
                 raise ValueError("No chunks generated from document")
 
-            # Initialize vector store with KB's embedding model
+            # Initialize vector store with KB's embedding model and team ID for usage tracking
             embedding_model_id = (
                 str(kb.embedding_model_id) if kb.embedding_model_id else None
             )
-            vector_store = VectorStore(embedding_model_id=embedding_model_id)
+            team_id = str(kb.team_id) if kb.team_id else None
+            vector_store = VectorStore(
+                embedding_model_id=embedding_model_id,
+                team_id=team_id,
+            )
 
             # Store chunks with embeddings
             created_chunks = await vector_store.store_chunks(document, chunks)
@@ -200,7 +204,7 @@ def reprocess_document_task(self, document_id: str) -> dict:
 
         kb = document.knowledge_base
 
-        # Delete existing chunks
+        # Delete existing chunks (no team_id needed for deletion)
         vector_store = VectorStore()
         deleted_count = await vector_store.delete_document_vectors(doc_uuid)
 
@@ -292,11 +296,15 @@ def rechunk_document_task(self, document_id: str) -> dict:
             separator = rechunk_settings.get("separator")
             clean_text_setting = rechunk_settings.get("clean_text", True)
 
-            # Delete existing chunks
+            # Delete existing chunks and prepare for re-embedding with team_id for usage tracking
             embedding_model_id = (
                 str(kb.embedding_model_id) if kb.embedding_model_id else None
             )
-            vector_store = VectorStore(embedding_model_id=embedding_model_id)
+            team_id = str(kb.team_id) if kb.team_id else None
+            vector_store = VectorStore(
+                embedding_model_id=embedding_model_id,
+                team_id=team_id,
+            )
             deleted_count = await vector_store.delete_document_vectors(doc_uuid)
 
             # Update KB stats for deleted chunks
@@ -443,11 +451,15 @@ def embed_document_chunks_task(self, document_id: str) -> dict:
                     "embedded_count": 0,
                 }
 
-            # Initialize vector store with KB's embedding model
+            # Initialize vector store with KB's embedding model and team ID for usage tracking
             embedding_model_id = (
                 str(kb.embedding_model_id) if kb.embedding_model_id else None
             )
-            vector_store = VectorStore(embedding_model_id=embedding_model_id)
+            team_id = str(kb.team_id) if kb.team_id else None
+            vector_store = VectorStore(
+                embedding_model_id=embedding_model_id,
+                team_id=team_id,
+            )
 
             # Generate embeddings and store vectors for each chunk
             embedded_count = 0

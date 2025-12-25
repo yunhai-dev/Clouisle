@@ -1140,7 +1140,11 @@ async def update_document_chunk(
         embedding_model_id = (
             str(kb.embedding_model_id) if kb.embedding_model_id else None
         )
-        vector_store = VectorStore(embedding_model_id=embedding_model_id)
+        team_id = str(kb.team_id) if kb.team_id else None
+        vector_store = VectorStore(
+            embedding_model_id=embedding_model_id,
+            team_id=team_id,
+        )
         await vector_store.update_chunk_vector(chunk)
     except Exception as e:
         logger.error(
@@ -1285,7 +1289,11 @@ async def create_document_chunk(
         embedding_model_id = (
             str(kb.embedding_model_id) if kb.embedding_model_id else None
         )
-        vector_store = VectorStore(embedding_model_id=embedding_model_id)
+        team_id = str(kb.team_id) if kb.team_id else None
+        vector_store = VectorStore(
+            embedding_model_id=embedding_model_id,
+            team_id=team_id,
+        )
         await vector_store.add_chunk_vector(kb_id, chunk)
     except Exception as e:
         import logging
@@ -1386,9 +1394,13 @@ async def search_knowledge_base(
     """
     kb = await check_kb_access(kb_id, current_user)
 
-    # Get embedding model from KB settings
+    # Get embedding model and team ID from KB for usage tracking
     embedding_model_id = str(kb.embedding_model_id) if kb.embedding_model_id else None
-    vector_store = VectorStore(embedding_model_id=embedding_model_id)
+    team_id = str(kb.team_id) if kb.team_id else None
+    vector_store = VectorStore(
+        embedding_model_id=embedding_model_id,
+        team_id=team_id,
+    )
 
     # Perform search
     results = await vector_store.search(

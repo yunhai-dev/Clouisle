@@ -122,7 +122,7 @@ export default function KnowledgeBasePage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="container py-6">
+      <div className="py-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <Skeleton className="h-9 w-32" />
@@ -139,7 +139,7 @@ export default function KnowledgeBasePage() {
   }
 
   return (
-    <div className="container py-6">
+    <div className="py-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

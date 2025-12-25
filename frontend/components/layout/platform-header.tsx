@@ -11,8 +11,9 @@ import {
   Database,
   Wrench,
   Grid3x3,
+  Home,
+  LayoutDashboard,
   LogOut,
-  Settings,
   User,
   Palette,
 } from 'lucide-react'
@@ -34,6 +35,12 @@ import { useSettings } from '@/hooks/use-settings'
 import { cn } from '@/lib/utils'
 
 const navItems = [
+  {
+    key: 'home',
+    href: '/app',
+    icon: Home,
+    exact: true,
+  },
   {
     key: 'workspace',
     href: '/app/workspace',
@@ -106,7 +113,8 @@ export function PlatformHeader() {
     router.push('/login')
   }
 
-  const isActive = (href: string) => pathname.startsWith(href)
+  const isActive = (href: string, exact?: boolean) => 
+    exact ? pathname === href : pathname.startsWith(href)
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -114,7 +122,7 @@ export function PlatformHeader() {
         {/* Left Side - Logo and Team Switcher */}
         <div className="flex items-center gap-3">
           {/* Logo */}
-          <Link href="/app/workspace" className="flex items-center space-x-2">
+          <Link href="/app" className="flex items-center space-x-2">
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground overflow-hidden">
               {siteSettings.site_icon ? (
                 <Image
@@ -149,7 +157,7 @@ export function PlatformHeader() {
             return (
               <Link key={item.key} href={item.href}>
                 <Button
-                  variant={isActive(item.href) ? 'secondary' : 'ghost'}
+                  variant={isActive(item.href, 'exact' in item ? item.exact : false) ? 'secondary' : 'ghost'}
                   size="sm"
                   className="gap-2 cursor-pointer"
                 >
@@ -206,16 +214,17 @@ export function PlatformHeader() {
                 </div>
               </div>
               <DropdownMenuSeparator />
-              <Link href="/settings/profile">
+              <Link href="/app/settings/profile">
                 <DropdownMenuItem>
                   <User className="mr-2 h-4 w-4" />
-                  {t('profile')}
+                  {t('profile.title')}
                 </DropdownMenuItem>
               </Link>
-              <Link href="/settings">
+              <DropdownMenuSeparator />
+              <Link href="/dashboard">
                 <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  {t('settings')}
+                  <LayoutDashboard className="mr-2 h-4 w-4" />
+                  {t('admin')}
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuSeparator />

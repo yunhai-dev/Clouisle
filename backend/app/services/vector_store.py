@@ -12,6 +12,7 @@ import jieba
 
 from app.llm import model_manager
 from app.models.knowledge_base import DocumentChunk, Document
+from app.services.usage_tracker import QuotaExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +28,23 @@ class VectorStore:
     - Embedding generation
     - Vector storage in PostgreSQL with pgvector
     - Similarity search
+    - Token usage tracking (when team_id is provided)
     """
 
-    def __init__(self, embedding_model_id: str | None = None):
+    def __init__(
+        self,
+        embedding_model_id: str | None = None,
+        team_id: str | None = None,
+    ):
         """
         Initialize vector store.
 
         Args:
             embedding_model_id: Optional embedding model ID to use
+            team_id: Optional team ID for usage tracking
         """
         self.embedding_model_id = embedding_model_id
+        self.team_id = team_id
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """
@@ -52,10 +60,21 @@ class VectorStore:
             return []
 
         try:
-            embeddings = await model_manager.embed(
-                texts, model_id=self.embedding_model_id
-            )
+            # Use team-level embedding if team_id is provided
+            if self.team_id and self.embedding_model_id:
+                embeddings = await model_manager.team_embed(
+                    team_id=self.team_id,
+                    texts=texts,
+                    model_id=self.embedding_model_id,
+                )
+            else:
+                embeddings = await model_manager.embed(
+                    texts, model_id=self.embedding_model_id
+                )
             return embeddings
+        except QuotaExceededError:
+            logger.error(f"Team {self.team_id} quota exceeded for embedding")
+            raise
         except Exception as e:
             logger.error(f"Error generating embeddings: {e}")
             raise
@@ -71,10 +90,22 @@ class VectorStore:
             Embedding vector
         """
         try:
-            embedding = await model_manager.embed_query(
-                query, model_id=self.embedding_model_id
-            )
-            return embedding
+            # Use team-level embedding if team_id is provided
+            if self.team_id and self.embedding_model_id:
+                embeddings = await model_manager.team_embed(
+                    team_id=self.team_id,
+                    texts=[query],
+                    model_id=self.embedding_model_id,
+                )
+                return embeddings[0]
+            else:
+                embedding = await model_manager.embed_query(
+                    query, model_id=self.embedding_model_id
+                )
+                return embedding
+        except QuotaExceededError:
+            logger.error(f"Team {self.team_id} quota exceeded for query embedding")
+            raise
         except Exception as e:
             logger.error(f"Error generating query embedding: {e}")
             raise

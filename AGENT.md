@@ -1,6 +1,6 @@
 # Clouisle Project Status & Architecture
 
-## 📅 Last Updated: 2025-12-21
+## 📅 Last Updated: 2025-12-25
 
 ## 🏗 Architecture Overview
 
@@ -494,7 +494,139 @@ The project uses a **Team** model for resource isolation and collaboration.
 
 ---
 
-## �📝 Recent Actions Log
+## 📊 Usage Tracking (Token 用量追踪)
+
+项目支持团队级别的 Token 用量追踪和配额管理。
+
+### 核心组件
+
+| 文件 | 说明 |
+|------|------|
+| `backend/app/services/usage_tracker.py` | 用量追踪服务 |
+| `backend/app/tasks/usage.py` | Celery 定时任务（用量重置） |
+| `backend/app/llm/manager.py` | 模型管理器（含团队级方法） |
+
+### 数据模型 (TeamModel)
+
+`TeamModel` 模型包含以下用量相关字段：
+
+| 字段 | 说明 |
+|------|------|
+| `daily_token_limit` | 每日 Token 配额（null 表示无限制） |
+| `monthly_token_limit` | 每月 Token 配额 |
+| `daily_request_limit` | 每日请求次数配额 |
+| `monthly_request_limit` | 每月请求次数配额 |
+| `daily_tokens_used` | 当日已用 Token 数 |
+| `monthly_tokens_used` | 当月已用 Token 数 |
+| `daily_requests_used` | 当日请求次数 |
+| `monthly_requests_used` | 当月请求次数 |
+| `daily_reset_at` | 每日用量重置时间 |
+| `monthly_reset_at` | 每月用量重置时间 |
+
+### UsageTracker 服务
+
+```python
+from app.services.usage_tracker import usage_tracker, QuotaExceededError
+
+# 检查配额是否足够
+team_model = await usage_tracker.check_quota(
+    team_id="team-uuid",
+    model_id="model-uuid",
+    tokens_needed=1000,  # 可选，预估需要的 token
+)
+
+# 记录用量（不检查配额）
+await usage_tracker.record_usage(
+    team_id="team-uuid",
+    model_id="model-uuid",
+    tokens_used=1500,
+    request_count=1,
+)
+
+# 检查配额并记录用量（推荐）
+await usage_tracker.check_and_record_usage(
+    team_id="team-uuid",
+    model_id="model-uuid",
+    tokens_used=1500,
+)
+
+# 获取用量统计
+stats = await usage_tracker.get_usage_stats(
+    team_id="team-uuid",
+    model_id="model-uuid",
+)
+# 返回: {
+#   "daily_tokens_used": 1500,
+#   "daily_token_limit": 100000,
+#   "daily_token_percent": 1.5,
+#   ...
+# }
+```
+
+### 团队级 LLM 调用
+
+`ModelManager` 提供了带用量追踪的团队级方法：
+
+```python
+from app.llm import model_manager, QuotaExceededError
+
+# 团队级 Chat（自动追踪用量 + 配额检查）
+try:
+    response = await model_manager.team_chat(
+        team_id="team-uuid",
+        messages=[{"role": "user", "content": "Hello!"}],
+        model_id="openai/gpt-4o",  # 或 model UUID
+    )
+except QuotaExceededError as e:
+    print(f"配额超限: {e.quota_type}")  # daily_token, monthly_token, etc.
+
+# 团队级流式调用
+async for chunk in model_manager.team_chat_stream(
+    team_id="team-uuid",
+    messages=[...],
+    model_id="openai/gpt-4o",
+):
+    print(chunk.delta.content, end="")
+
+# 团队级 Embedding
+vectors = await model_manager.team_embed(
+    team_id="team-uuid",
+    texts=["text1", "text2"],
+    model_id="openai/text-embedding-3-small",
+)
+```
+
+### 定时任务
+
+用量重置由 Celery Beat 定时任务自动执行：
+
+| 任务 | 执行时间 | 说明 |
+|------|----------|------|
+| `tasks.reset_daily_usage` | 每天 00:00 | 重置所有团队模型的每日用量 |
+| `tasks.reset_monthly_usage` | 每月 1 日 00:05 | 重置所有团队模型的每月用量 |
+
+启动 Celery Beat：
+```bash
+cd backend
+celery -A app.core.celery beat --loglevel=info
+```
+
+### 配额超限错误
+
+当配额超限时，会抛出 `QuotaExceededError`，包含以下信息：
+
+| 属性 | 说明 |
+|------|------|
+| `quota_type` | 超限类型：`daily_token`, `monthly_token`, `daily_request`, `monthly_request` |
+| `team_id` | 团队 ID |
+| `model` | 模型 ID |
+| `code` | 错误码：`quota_exceeded` |
+
+前端应根据 `quota_type` 显示相应的错误提示。
+
+---
+
+## 📝 Recent Actions Log
 
 1.  **Project Initialization**:
     - Created `backend` and `frontend` directories.

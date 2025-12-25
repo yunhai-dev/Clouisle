@@ -56,6 +56,7 @@ from .errors import (
     TimeoutError,
     InvalidRequestError,
     InsufficientQuotaError,
+    QuotaExceededError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
@@ -112,6 +113,7 @@ __all__ = [
     "TimeoutError",
     "InvalidRequestError",
     "InsufficientQuotaError",
+    "QuotaExceededError",
     "TaskNotFoundError",
     "UnsupportedOperationError",
     # Base Types
