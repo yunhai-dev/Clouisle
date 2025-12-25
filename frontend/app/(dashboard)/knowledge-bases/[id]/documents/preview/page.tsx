@@ -15,9 +15,9 @@ export default async function DocumentsPreviewPage({
   const documentIds = docs ? docs.split(',') : []
   
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex h-svh flex-col overflow-hidden">
       <Header />
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <DocumentsPreviewClient 
           knowledgeBaseId={id} 
           documentIds={documentIds} 

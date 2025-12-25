@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     permissions,
     roles,
     teams,
+    team_models,
     site_settings,
     upload,
     models,
@@ -20,6 +21,7 @@ api_router.include_router(
 )
 api_router.include_router(roles.router, prefix="/roles", tags=["roles"])
 api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
+api_router.include_router(team_models.router, prefix="/teams", tags=["team-models"])
 api_router.include_router(
     site_settings.router, prefix="/site-settings", tags=["site-settings"]
 )

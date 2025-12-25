@@ -24,7 +24,8 @@
     "clearFilters": "Clear filters",
     "uploadSuccess": "Upload successful",
     "invalidFileType": "Unsupported file type",
-    "fileTooLarge": "File too large, maximum 10MB"
+    "fileTooLarge": "File too large, maximum 10MB",
+    "status": "Status"
   },
   "nav": {
     "general": "General",
@@ -123,9 +124,8 @@
     "teamNamePlaceholder": "Enter team name",
     "teamDescription": "Description",
     "teamDescriptionPlaceholder": "Enter team description (optional)",
-    "avatarUrl": "Avatar URL",
-    "avatarUrlPlaceholder": "Enter avatar image URL",
-    "avatarUrlDescription": "Optional: URL for the team avatar",
+    "avatar": "Team Avatar",
+    "avatarHint": "Recommended: 200x200 pixels, JPG/PNG format",
     "noDescription": "No description",
     "defaultTeam": "Default Team",
     "members": "Members",
@@ -169,7 +169,37 @@
     "bulkDeleted": "Successfully deleted {count} teams",
     "teamNotFound": "Team not found",
     "searchUsers": "Search users...",
-    "noUsersFound": "No users found"
+    "noUsersFound": "No users found",
+    "modelAuth": "Model Authorization",
+    "authorizedModels": "Authorized Models",
+    "addModel": "Authorize Model",
+    "searchModels": "Search models...",
+    "noModelsFound": "No models found",
+    "allModelsAuthorized": "All models have been authorized",
+    "noModelsAuthorized": "No authorized models",
+    "addModelHint": "Click the button above to authorize models",
+    "authorizeModel": "Authorize",
+    "authorizeModels": "Authorize {count} models",
+    "selectAll": "Select All",
+    "selectedCount": "{count} selected",
+    "modelAuthorized": "Model authorized successfully",
+    "modelsAuthorized": "Successfully authorized {count} models",
+    "modelAuthUpdated": "Authorization updated successfully",
+    "modelAuthRevoked": "Model authorization revoked",
+    "editModelAuth": "Edit Authorization",
+    "quotaSettings": "Quota Settings",
+    "dailyQuota": "Daily Quota",
+    "monthlyQuota": "Monthly Quota",
+    "dailyTokenLimit": "Daily Token Limit",
+    "monthlyTokenLimit": "Monthly Token Limit",
+    "dailyRequestLimit": "Daily Request Limit",
+    "monthlyRequestLimit": "Monthly Request Limit",
+    "unlimited": "Unlimited",
+    "priority": "Priority",
+    "priorityHint": "Higher value means higher priority. Models of the same type are sorted by priority.",
+    "revokeModelAuth": "Revoke Authorization",
+    "revokeModelAuthConfirm": "Are you sure you want to revoke authorization for \"{name}\"? The team will no longer be able to use this model.",
+    "revoke": "Revoke"
   },
   "users": {
     "title": "User List",
@@ -354,6 +384,10 @@
     "directionRTL": "Right to Left",
     "reset": "Reset",
     "language": "Language",
+    "headerLayout": "Header Layout",
+    "headerDefault": "Default",
+    "headerCentered": "Centered",
+    "headerMinimal": "Minimal",
     "languageDescription": "Select your preferred language"
   },
   "siteSettings": {
@@ -581,6 +615,8 @@
       "midjourney": "Midjourney",
       "custom": "Custom"
     },
+    "name": "Model Name",
+    "type": "Model Type",
     "modelTypes": {
       "chat": "Chat",
       "embedding": "Embedding",
@@ -590,6 +626,63 @@
       "text_to_image": "Text to Image",
       "text_to_video": "Text to Video",
       "image_to_video": "Image to Video"
+    },
+    "types": {
+      "chat": "Chat",
+      "embedding": "Embed",
+      "rerank": "Rerank",
+      "tts": "TTS",
+      "stt": "STT",
+      "text_to_image": "T2I",
+      "text_to_video": "T2V",
+      "image_to_video": "I2V"
+    }
+  },
+  "platform": {
+    "nav": {
+      "workspace": "Apps",
+      "kb": "Knowledge Bases",
+      "tools": "Tools",
+      "models": "Models"
+    },
+    "profile": "Profile",
+    "settings": "Settings",
+    "logout": "Log out",
+    "logoutSuccess": "Logged out successfully",
+    "teams": "Teams",
+    "manageTeams": "Manage Teams",
+    "noTeams": "No teams",
+    "workspace": {
+      "title": "Application Workspace",
+      "description": "Create and manage your AI applications",
+      "createApp": "Create App",
+      "noApps": "No apps yet",
+      "createAppHint": "Create your first AI application to get started",
+      "createFirstApp": "Create First App"
+    },
+    "kb": {
+      "title": "Knowledge Bases",
+      "description": "Manage your knowledge bases and documents",
+      "createKb": "Create Knowledge Base",
+      "noKbs": "No knowledge bases yet",
+      "createKbHint": "Create a knowledge base to store and retrieve information",
+      "createFirstKb": "Create First Knowledge Base"
+    },
+    "tools": {
+      "title": "Tool Center",
+      "description": "Manage and configure available tools",
+      "createTool": "Create Tool",
+      "noTools": "No tools yet",
+      "createToolHint": "Add tools to extend your AI application capabilities",
+      "createFirstTool": "Create First Tool"
+    },
+    "models": {
+      "title": "Model Management",
+      "description": "Configure and manage AI models",
+      "createModel": "Add Model",
+      "noModels": "No models yet",
+      "createModelHint": "Add AI models to power your applications",
+      "createFirstModel": "Add First Model"
     }
   },
   "knowledgeBases": {
@@ -612,6 +705,7 @@
     "embeddingModel": "Embedding Model",
     "selectEmbeddingModel": "Select embedding model",
     "embeddingModelHint": "Model used for generating document embeddings",
+    "embeddingModelCannotChange": "Embedding model cannot be changed after creation",
     "noEmbeddingModels": "No embedding models available",
     "chunkSize": "Chunk Size",
     "chunkSizeHint": "Target chunk size in tokens",
@@ -632,6 +726,7 @@
     "documentsDescription": "Manage documents in this knowledge base",
     "chunks": "Chunks",
     "createdAt": "Created At",
+    "createdBy": "Created by",
     "filterKbs": "Search knowledge bases...",
     "noKbs": "No knowledge bases found",
     "createKbHint": "Click the button above to create your first knowledge base",
@@ -685,6 +780,9 @@
     "bulkDocumentsDeleted": "Successfully deleted {count} documents",
     "reprocess": "Reprocess",
     "downloadOriginal": "Download Original",
+    "viewSourceUrl": "View Source URL",
+    "downloadStarted": "Download started",
+    "downloadFailed": "Failed to download file",
     "documentReprocessing": "Document queued for reprocessing",
     "viewChunks": "Edit Chunks",
     "documentChunks": "Document Chunks",
@@ -774,6 +872,7 @@
     "noResultsHint": "Try adjusting your query or lowering the similarity threshold",
     "searchResultsCount": "{count} results found",
     "similarity": "Similarity",
+    "searchMode": "Search Mode",
     "hybridSearch": "Hybrid",
     "vectorSearch": "Vector",
     "fulltextSearch": "Fulltext",

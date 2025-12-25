@@ -16,6 +16,7 @@ import {
   XCircle,
   Loader2,
   Search,
+  Cpu,
 } from 'lucide-react'
 import { knowledgeBasesApi, type KnowledgeBase, type KnowledgeBaseStats } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -119,6 +120,17 @@ export function KnowledgeBaseDetailClient({ knowledgeBaseId }: KnowledgeBaseDeta
                 <span className="text-sm">{knowledgeBase.description}</span>
               )}
             </div>
+            {knowledgeBase.embedding_model && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">
+                  {t('embeddingModel')}: {knowledgeBase.embedding_model.name}
+                </span>
+                <Badge variant="outline" className="text-xs px-1.5 py-0">
+                  {knowledgeBase.embedding_model.provider}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
         

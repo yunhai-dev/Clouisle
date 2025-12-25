@@ -160,7 +160,7 @@ export function AppSidebar({ variant = 'inset', collapsible = 'icon', side = 'le
         <SidebarMenu>
           <SidebarMenuItem>
             <Link href="/dashboard">
-              <SidebarMenuButton size="lg">
+              <SidebarMenuButton size="lg" tooltip={siteSettings.site_name || 'Clouisle'}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground overflow-hidden">
                   {siteSettings.site_icon ? (
                     <Image 
@@ -175,7 +175,7 @@ export function AppSidebar({ variant = 'inset', collapsible = 'icon', side = 'le
                     <Globe className="size-5" />
                   )}
                 </div>
-                <div className="flex flex-col gap-0.5 leading-none">
+                <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
                   <span className="font-semibold">{siteSettings.site_name || 'Clouisle'}</span>
                   <span className="text-xs text-muted-foreground">Admin Panel</span>
                 </div>
@@ -248,21 +248,29 @@ export function AppSidebar({ variant = 'inset', collapsible = 'icon', side = 'le
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
-              <DropdownMenuTrigger className="w-full ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent active:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground flex items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0 h-12">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user?.avatar_url || ''} alt={user?.username || 'User'} />
-                  <AvatarFallback className="rounded-lg">
-                    {user ? getInitials(user.username) : 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{user?.username || '...'}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user?.email || '...'}
-                  </span>
-                </div>
-                <ChevronUp className="ml-auto size-4" />
-              </DropdownMenuTrigger>
+              <DropdownMenuTrigger 
+                render={(props) => (
+                  <SidebarMenuButton 
+                    {...props} 
+                    size="lg" 
+                    tooltip={user?.username || 'User'}
+                  >
+                    <Avatar className="h-8 w-8 rounded-lg">
+                      <AvatarImage src={user?.avatar_url || ''} alt={user?.username || 'User'} />
+                      <AvatarFallback className="rounded-lg">
+                        {user ? getInitials(user.username) : 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                      <span className="truncate font-semibold">{user?.username || '...'}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {user?.email || '...'}
+                      </span>
+                    </div>
+                    <ChevronUp className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
+                  </SidebarMenuButton>
+                )}
+              />
               <DropdownMenuContent
                 className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
                 side="top"

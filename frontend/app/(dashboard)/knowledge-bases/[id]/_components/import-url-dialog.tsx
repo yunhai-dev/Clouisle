@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { useTranslations } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import { Link, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { knowledgeBasesApi, ApiError } from '@/lib/api'
@@ -33,6 +34,7 @@ export function ImportUrlDialog({
 }: ImportUrlDialogProps) {
   const t = useTranslations('knowledgeBases')
   const commonT = useTranslations('common')
+  const router = useRouter()
   
   const [url, setUrl] = React.useState('')
   const [name, setName] = React.useState('')
@@ -69,10 +71,13 @@ export function ImportUrlDialog({
     setFieldErrors({})
     
     try {
-      await knowledgeBasesApi.importUrl(knowledgeBaseId, url.trim(), name.trim() || undefined)
+      const doc = await knowledgeBasesApi.importUrl(knowledgeBaseId, url.trim(), name.trim() || undefined)
       toast.success(t('urlImported'))
       onOpenChange(false)
       onSuccess()
+      
+      // 跳转到预览页面配置分段
+      router.push(`/knowledge-bases/${knowledgeBaseId}/documents/preview?docs=${doc.id}`)
     } catch (error) {
       if (error instanceof ApiError && error.isValidationError()) {
         setFieldErrors(error.getFieldErrors())

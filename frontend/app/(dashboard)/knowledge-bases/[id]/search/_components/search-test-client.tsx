@@ -23,10 +23,10 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -54,7 +54,7 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
   // 搜索参数
   const [searchMode, setSearchMode] = React.useState<SearchMode>('hybrid')
   const [topK, setTopK] = React.useState(5)
-  const [threshold, setThreshold] = React.useState(0)
+  const [thresholdInput, setThresholdInput] = React.useState('0')
   const [showSettings, setShowSettings] = React.useState(false)
   
   // 展开的结果
@@ -87,7 +87,7 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
         query: query.trim(),
         search_mode: searchMode,
         top_k: topK,
-        threshold,
+        threshold: parseFloat(thresholdInput) || 0,
       })
       setResults(response.results)
       // 默认展开第一个结果
@@ -103,6 +103,8 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
   
   // 回车搜索
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // 中文输入法组合状态下不触发
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSearch()
@@ -146,7 +148,7 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
   return (
     <div className="flex h-full flex-col">
       {/* 页头 */}
-      <div className="flex-none flex items-center gap-3 border-b px-4 py-3">
+      <div className="flex-none flex items-center gap-3 px-4 py-3">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -164,7 +166,7 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
       </div>
       
       {/* 搜索结果区域 - 可滚动 */}
-      <div className="flex-1 min-h-0 overflow-auto p-4 pb-4">
+      <div className="flex-1 min-h-0 overflow-auto px-4 pb-4">
         {!hasSearched ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Search className="h-10 w-10 text-muted-foreground/30 mb-3" />
@@ -256,107 +258,120 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
         )}
       </div>
       
-      {/* 底部搜索输入区 - 使用 sticky 固定在内容区底部 */}
-      <div className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-4 py-3">
-        <div className="max-w-3xl mx-auto space-y-2">
-          {/* 搜索输入框 + 设置按钮 */}
-          <div className="flex items-center gap-2">
-            {/* 搜索模式切换 */}
-            <ToggleGroup 
-              type="single" 
-              value={searchMode} 
-              onValueChange={(v: string) => v && setSearchMode(v as SearchMode)}
-              size="sm"
-              className="shrink-0"
-            >
-              <ToggleGroupItem value="hybrid" aria-label={t('hybridSearch')} className="gap-1 text-xs px-2 h-8">
-                <Zap className="h-3 w-3" />
-                <span className="hidden sm:inline">{t('hybridSearch')}</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem value="vector" aria-label={t('vectorSearch')} className="gap-1 text-xs px-2 h-8">
-                <Sparkles className="h-3 w-3" />
-                <span className="hidden sm:inline">{t('vectorSearch')}</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem value="fulltext" aria-label={t('fulltextSearch')} className="gap-1 text-xs px-2 h-8">
-                <FileSearch className="h-3 w-3" />
-                <span className="hidden sm:inline">{t('fulltextSearch')}</span>
-              </ToggleGroupItem>
-            </ToggleGroup>
-            
+      {/* 底部搜索输入区 */}
+      <div className="flex-none px-4 py-4 md:rounded-b-xl">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center gap-2 rounded-full border bg-background shadow-sm px-3 py-1.5">
             {/* 搜索输入框 */}
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={t('searchPlaceholder')}
-                className="pl-8 pr-3 h-8 text-sm"
+                className="pl-8 pr-3 h-9 text-sm border-0 shadow-none focus-visible:ring-0"
                 disabled={isSearching}
               />
             </div>
             
             {/* 高级设置按钮 */}
-            <Collapsible open={showSettings} onOpenChange={setShowSettings}>
-              <CollapsibleTrigger asChild>
+            <Popover open={showSettings} onOpenChange={setShowSettings}>
+              <PopoverTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
                   <Settings2 className="h-3.5 w-3.5" />
                 </Button>
-              </CollapsibleTrigger>
-            </Collapsible>
+              </PopoverTrigger>
+              <PopoverContent className="w-72" align="end">
+                <div className="grid gap-3">
+                  {/* 搜索模式切换 */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">
+                      {t('searchMode')}
+                    </Label>
+                    <ToggleGroup 
+                      type="single" 
+                      value={searchMode} 
+                      onValueChange={(v: string) => v && setSearchMode(v as SearchMode)}
+                      size="sm"
+                      className="w-full justify-start"
+                    >
+                      <ToggleGroupItem value="hybrid" aria-label={t('hybridSearch')} className="gap-1 text-xs px-2 h-8">
+                        <Zap className="h-3 w-3" />
+                        {t('hybridSearch')}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="vector" aria-label={t('vectorSearch')} className="gap-1 text-xs px-2 h-8">
+                        <Sparkles className="h-3 w-3" />
+                        {t('vectorSearch')}
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="fulltext" aria-label={t('fulltextSearch')} className="gap-1 text-xs px-2 h-8">
+                        <FileSearch className="h-3 w-3" />
+                        {t('fulltextSearch')}
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <Label htmlFor="topK" className="text-xs font-medium">
+                      {t('topK')}
+                    </Label>
+                    <Input
+                      id="topK"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={topK}
+                      onChange={(e) => setTopK(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+                      className="h-8"
+                    />
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <Label htmlFor="threshold" className="text-xs font-medium">
+                      {t('threshold')}
+                    </Label>
+                    <Input
+                      id="threshold"
+                      type="text"
+                      inputMode="decimal"
+                      value={thresholdInput}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        // 允许输入空字符串、数字和小数点
+                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                          const num = parseFloat(val)
+                          if (val === '' || (num >= 0 && num <= 1)) {
+                            setThresholdInput(val)
+                          }
+                        }
+                      }}
+                      onBlur={() => {
+                        // 失去焦点时规范化值
+                        const num = parseFloat(thresholdInput) || 0
+                        setThresholdInput(String(Math.min(1, Math.max(0, num))))
+                      }}
+                      className="h-8"
+                      placeholder="0 - 1"
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             
             {/* 搜索按钮 */}
             <Button 
               onClick={handleSearch} 
               disabled={!query.trim() || isSearching}
-              size="sm"
-              className="h-8 px-3 shrink-0"
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-full"
             >
               {isSearching ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Send className="h-3.5 w-3.5" />
+                <Send className="h-4 w-4" />
               )}
             </Button>
           </div>
-          
-          {/* 高级设置面板 */}
-          <Collapsible open={showSettings} onOpenChange={setShowSettings}>
-            <CollapsibleContent>
-              <div className="grid gap-3 sm:grid-cols-2 rounded-md border p-3 text-sm">
-                <div className="space-y-1">
-                  <Label htmlFor="topK" className="text-xs">
-                    {t('topK')}
-                  </Label>
-                  <Input
-                    id="topK"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={topK}
-                    onChange={(e) => setTopK(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
-                    className="h-8"
-                  />
-                </div>
-                
-                <div className="space-y-1">
-                  <Label htmlFor="threshold" className="text-xs">
-                    {t('threshold')}
-                  </Label>
-                  <Input
-                    id="threshold"
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={threshold}
-                    onChange={(e) => setThreshold(Math.min(1, Math.max(0, Number(e.target.value) || 0)))}
-                    className="h-8"
-                  />
-                </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
         </div>
       </div>
     </div>

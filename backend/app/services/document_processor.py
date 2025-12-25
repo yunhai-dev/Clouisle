@@ -73,10 +73,10 @@ class DocumentProcessor:
         """
         if upload_dir is None:
             # Default to project root uploads/documents
+            # __file__ = backend/app/services/document_processor.py
+            # Need 4 levels up to get project root
             base_dir = os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-                )
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             )
             upload_dir = os.path.join(base_dir, "uploads", "documents")
 

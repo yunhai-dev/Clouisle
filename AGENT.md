@@ -40,8 +40,8 @@ frontend/
 │   │   └── login/
 │   │       ├── page.tsx
 │   │       └── _components/      # 登录页面专属组件
-│   ├── (dashboard)/              # 仪表板路由组
-│   │   ├── layout.tsx
+│   ├── (dashboard)/              # 后台管理路由组 (管理员)
+│   │   ├── layout.tsx            # SidebarProvider + SidebarInset
 │   │   ├── users/
 │   │   │   ├── page.tsx
 │   │   │   └── _components/      # Users 页面专属组件
@@ -51,9 +51,23 @@ frontend/
 │   │   ├── roles/
 │   │   │   ├── page.tsx
 │   │   │   └── _components/
-│   │   └── teams/
-│   │       ├── page.tsx
+│   │   ├── teams/
+│   │   │   ├── page.tsx
+│   │   │   └── _components/
+│   │   └── knowledge-bases/      # 知识库管理 (后台)
+│   │       ├── [id]/
+│   │       │   ├── search/       # 搜索测试页
+│   │       │   │   └── _components/
+│   │       │   └── _components/
 │   │       └── _components/
+│   ├── (platform)/               # 中台路由组 (普通用户)
+│   │   ├── layout.tsx            # PlatformHeader (64px) + flex main
+│   │   └── app/
+│   │       └── kb/               # 知识库 (中台)
+│   │           └── [id]/
+│   │               ├── search/   # 搜索测试页
+│   │               │   └── _components/
+│   │               └── _components/
 ├── components/                   # 全局共享组件
 │   ├── ui/                       # shadcn/ui 基础组件（不修改）
 │   ├── layout/                   # 布局组件 (header, sidebar)
@@ -62,6 +76,45 @@ frontend/
 ├── lib/                          # 工具函数
 └── messages/                     # 翻译文件 (en.json, zh.json)
 ```
+
+### 中台与后台隔离规范
+
+项目包含两套独立的用户界面：
+
+| 维度 | 后台 (Dashboard) | 中台 (Platform) |
+|------|------------------|-----------------|
+| 路由组 | `(dashboard)/` | `(platform)/` |
+| 目标用户 | 管理员 | 普通用户 |
+| 布局组件 | `SidebarProvider` + `SidebarInset` | `PlatformHeader` (64px) + flex main |
+| 圆角处理 | `SidebarInset` 自带 `rounded-xl`，底部固定栏需加 `md:rounded-b-xl` | 无特殊圆角 |
+| 路由前缀 | `/users`, `/knowledge-bases` | `/app/kb` |
+
+**隔离原则**：
+1. **组件不共享**: 中台和后台的页面组件必须分别放在各自的 `_components/` 目录，**禁止跨路由组引用**
+2. **功能同步**: 当两边有相同功能时（如搜索测试），需要分别实现，修改一边时需**同步修改另一边**
+3. **样式隔离**: 布局不同导致样式细节不同，不要复制粘贴后忘记调整
+4. **API 共享**: `lib/api/` 下的 API 客户端可以共享，类型定义也共享
+
+**布局差异导致的样式注意事项**：
+
+```tsx
+// 后台: SidebarInset 提供 h-full，子组件可用 flex h-full
+<div className="flex h-full flex-col">
+  <div className="flex-1 min-h-0 overflow-auto">...</div>
+  <div className="flex-none md:rounded-b-xl">底部栏</div>
+</div>
+
+// 中台: layout 的 main 没有高度约束，需要显式计算
+<div className="flex flex-col" style={{ height: 'calc(100vh - 64px)' }}>
+  <div className="flex-1 min-h-0 overflow-auto">...</div>
+  <div className="sticky bottom-0">底部栏</div>
+</div>
+```
+
+**常见问题排查**：
+- 后台底部栏被 SidebarInset 圆角遮挡 → 添加 `md:rounded-b-xl`
+- 中台 `h-full` 或 `flex-1` 无效 → 使用 `calc(100vh - 64px)` 显式高度
+- sticky 定位失效 → 检查父容器是否有 `overflow: hidden` 或缺少高度约束
 
 **组件化规范**：
 - 每个路由目录下创建 `_components/` 文件夹存放页面专属组件
@@ -85,6 +138,27 @@ frontend/
 **Hydration 处理**：
 - 依赖 localStorage 的状态需要使用 `mounted` 状态避免服务端/客户端不匹配
 - 参考 `hooks/use-settings.tsx` 的实现模式
+
+**输入处理规范**：
+- **中文 IME 处理**: 监听键盘事件时必须检测 `e.nativeEvent.isComposing`，避免输入法组合状态下回车误触发
+  ```tsx
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return  // 中文输入法组合中，忽略
+    if (e.key === 'Enter') handleSubmit()
+  }
+  ```
+- **小数输入**: number 类型 input 在某些浏览器无法输入小数点，改用 text + inputMode="decimal" + 正则验证
+  ```tsx
+  const [value, setValue] = useState('0')
+  <Input
+    type="text"
+    inputMode="decimal"
+    value={value}
+    onChange={(e) => {
+      if (/^\d*\.?\d*$/.test(e.target.value)) setValue(e.target.value)
+    }}
+  />
+  ```
 
 ### Infrastructure
 - **Containerization**: Docker & Docker Compose

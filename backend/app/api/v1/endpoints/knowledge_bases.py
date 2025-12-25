@@ -13,6 +13,7 @@ from tortoise.expressions import F
 
 from app.api import deps
 from app.models.user import User, Team, TeamMember
+from app.models.model import TeamModel, Model
 from app.models.knowledge_base import (
     KnowledgeBase,
     Document,
@@ -27,6 +28,7 @@ from app.schemas.knowledge_base import (
     KnowledgeBaseCreate,
     KnowledgeBaseUpdate,
     KnowledgeBaseStats,
+    EmbeddingModelInfo,
     Document as DocumentSchema,
     DocumentList,
     DocumentCreate,
@@ -95,6 +97,30 @@ async def check_team_access(
     return team
 
 
+async def get_embedding_model_info(model_id: UUID | None) -> EmbeddingModelInfo | None:
+    """获取嵌入模型简要信息"""
+    if not model_id:
+        return None
+    model = await Model.filter(id=model_id).first()
+    if not model:
+        return None
+    return EmbeddingModelInfo(
+        id=model.id,
+        name=model.name,
+        provider=model.provider,
+        model_id=model.model_id,
+    )
+
+
+async def kb_with_embedding_model(kb: KnowledgeBase) -> dict:
+    """构建包含嵌入模型信息的知识库响应"""
+    embedding_model = await get_embedding_model_info(kb.embedding_model_id)
+    # 转换为 dict 并添加 embedding_model
+    kb_data = KnowledgeBaseSchema.model_validate(kb).model_dump()
+    kb_data["embedding_model"] = embedding_model
+    return kb_data
+
+
 async def check_kb_access(
     kb_id: UUID, user: User, require_write: bool = False
 ) -> KnowledgeBase:
@@ -153,11 +179,22 @@ async def list_knowledge_bases(
 
     total = await query.count()
     skip = (page - 1) * page_size
-    kbs = await query.prefetch_related("team").offset(skip).limit(page_size)
+    kbs = (
+        await query.prefetch_related("team", "created_by").offset(skip).limit(page_size)
+    )
+
+    # 为每个知识库添加嵌入模型信息
+    kb_list = []
+    for kb in kbs:
+        kb_data = KnowledgeBaseList.model_validate(kb).model_dump()
+        kb_data["embedding_model"] = await get_embedding_model_info(
+            kb.embedding_model_id
+        )
+        kb_list.append(kb_data)
 
     return success(
         data={
-            "items": kbs,
+            "items": kb_list,
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -188,6 +225,19 @@ async def create_knowledge_base(
             msg_key="kb_name_exists",
         )
 
+    # Check if team has permission to use the embedding model
+    if kb_in.embedding_model_id:
+        team_model = await TeamModel.filter(
+            team_id=kb_in.team_id,
+            model_id=kb_in.embedding_model_id,
+            is_enabled=True,
+        ).first()
+        if not team_model:
+            raise BusinessError(
+                code=ResponseCode.MODEL_NOT_AUTHORIZED,
+                msg_key="model_not_authorized",
+            )
+
     # Create knowledge base
     kb = await KnowledgeBase.create(
         name=kb_in.name,
@@ -201,7 +251,8 @@ async def create_knowledge_base(
 
     # Reload with relations
     kb = await KnowledgeBase.get(id=kb.id).prefetch_related("team", "created_by")
-    return success(data=kb, msg_key="kb_created")
+    kb_data = await kb_with_embedding_model(kb)
+    return success(data=kb_data, msg_key="kb_created")
 
 
 @router.get("/{kb_id}", response_model=Response[KnowledgeBaseSchema])
@@ -213,7 +264,8 @@ async def get_knowledge_base(
     Get knowledge base by ID.
     """
     kb = await check_kb_access(kb_id, current_user)
-    return success(data=kb)
+    kb_data = await kb_with_embedding_model(kb)
+    return success(data=kb_data)
 
 
 @router.put("/{kb_id}", response_model=Response[KnowledgeBaseSchema])
@@ -248,8 +300,7 @@ async def update_knowledge_base(
         kb.description = kb_in.description
     if kb_in.icon is not None:
         kb.icon = kb_in.icon
-    if kb_in.embedding_model_id is not None:
-        kb.embedding_model_id = kb_in.embedding_model_id
+    # embedding_model_id 创建后不允许修改，已有文档的向量与模型绑定
     if kb_in.settings is not None:
         kb.settings = kb_in.settings.model_dump()
     if kb_in.status is not None and kb_in.status in [
@@ -262,7 +313,8 @@ async def update_knowledge_base(
 
     # Reload with relations
     kb = await KnowledgeBase.get(id=kb_id).prefetch_related("team", "created_by")
-    return success(data=kb, msg_key="kb_updated")
+    kb_data = await kb_with_embedding_model(kb)
+    return success(data=kb_data, msg_key="kb_updated")
 
 
 @router.delete("/{kb_id}", response_model=Response[dict])
@@ -456,19 +508,9 @@ async def add_url_document(
     kb.document_count += 1
     await kb.save()
 
-    # Trigger async URL fetch and processing task
-    try:
-        from app.tasks.knowledge_base import process_url_document_task
-
-        task = process_url_document_task.delay(str(doc.id))
-        # Save task ID for potential cancellation
-        doc.metadata = doc.metadata or {}
-        doc.metadata["task_id"] = task.id
-        await doc.save()
-    except Exception:
-        import logging
-
-        logging.warning("Celery task not dispatched - worker may not be running")
+    # NOTE: Do NOT auto-trigger processing task for URL documents.
+    # The user will be redirected to the preview editor to configure
+    # chunking settings before manually triggering processing.
 
     # Reload with relations
     doc = await Document.get(id=doc.id).prefetch_related("uploaded_by")
@@ -727,14 +769,38 @@ async def process_document_with_chunks(
             status_code=404,
         )
 
-    if doc.status != DocumentStatus.PENDING.value:
+    # Allow reprocessing for pending, completed, and error status documents
+    # Only block if currently processing
+    if doc.status == DocumentStatus.PROCESSING.value:
         raise BusinessError(
             code=ResponseCode.VALIDATION_ERROR,
-            msg_key="document_not_pending",
+            msg_key="document_is_processing",
         )
+
+    # Cancel existing task if any (for reprocessing completed/error documents)
+    old_task_id = (doc.metadata or {}).get("embed_task_id")
+    if old_task_id:
+        try:
+            from app.core.celery import celery_app
+
+            celery_app.control.revoke(old_task_id, terminate=True)
+        except Exception:
+            pass
+
+    # Delete existing vectors for reprocessing (if document was completed)
+    if doc.status == DocumentStatus.COMPLETED.value:
+        try:
+            from app.services.vector_store import vector_store
+
+            # Delete old vectors (chunks) by document ID
+            await vector_store.delete_document_vectors(doc.id)
+            logger.info(f"Deleted existing vectors for document {doc.id}")
+        except Exception as e:
+            logger.warning(f"Failed to delete existing vectors: {e}")
 
     # Update document status to processing
     doc.status = DocumentStatus.PROCESSING.value
+    doc.error_message = None  # Clear previous error
     await doc.save()
 
     try:

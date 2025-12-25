@@ -108,6 +108,18 @@ class TeamInfo(BaseModel):
         from_attributes = True
 
 
+class EmbeddingModelInfo(BaseModel):
+    """嵌入模型简要信息"""
+
+    id: UUID
+    name: str
+    provider: str
+    model_id: str
+
+    class Config:
+        from_attributes = True
+
+
 class KnowledgeBase(KnowledgeBaseBase):
     """Knowledge base response schema"""
 
@@ -116,6 +128,7 @@ class KnowledgeBase(KnowledgeBaseBase):
     created_by: Optional[CreatorInfo] = None
     status: str
     embedding_model_id: Optional[UUID] = None
+    embedding_model: Optional[EmbeddingModelInfo] = None
     settings: Optional[dict] = None
     document_count: int
     total_chunks: int
@@ -135,9 +148,13 @@ class KnowledgeBaseList(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     team: TeamInfo
+    created_by: Optional[CreatorInfo] = None
     status: str
+    embedding_model_id: Optional[UUID] = None
+    embedding_model: Optional[EmbeddingModelInfo] = None
     document_count: int
     total_chunks: int
+    total_tokens: int
     created_at: datetime
 
     class Config:
@@ -195,8 +212,11 @@ class DocumentList(BaseModel):
     id: UUID
     name: str
     doc_type: str
+    file_path: Optional[str] = None
     file_size: Optional[int] = None
+    source_url: Optional[str] = None
     status: str
+    error_message: Optional[str] = None
     chunk_count: int
     token_count: int
     created_at: datetime

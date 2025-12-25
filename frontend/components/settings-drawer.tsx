@@ -23,9 +23,13 @@ import { useSettings } from '@/hooks/use-settings'
 interface SettingsDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** 是否显示侧边栏样式设置，默认为 true */
+  showSidebarStyle?: boolean
+  /** 是否显示中台 header 导航布局设置，默认为 false */
+  showPlatformHeader?: boolean
 }
 
-export function SettingsDrawer({ open, onOpenChange }: SettingsDrawerProps) {
+export function SettingsDrawer({ open, onOpenChange, showSidebarStyle = true, showPlatformHeader = false }: SettingsDrawerProps) {
   const { theme, setTheme } = useTheme()
   const locale = useLocale()
   const router = useRouter()
@@ -35,10 +39,12 @@ export function SettingsDrawer({ open, onOpenChange }: SettingsDrawerProps) {
     sidebarVariant,
     layoutVariant,
     direction,
+    platformHeaderVariant,
     mounted,
     setSidebarVariant,
     setLayoutVariant,
     setDirection,
+    setPlatformHeaderVariant,
     resetSettings,
   } = useSettings()
 
@@ -46,6 +52,7 @@ export function SettingsDrawer({ open, onOpenChange }: SettingsDrawerProps) {
   const effectiveSidebarVariant = mounted ? sidebarVariant : 'inset'
   const effectiveLayoutVariant = mounted ? layoutVariant : 'default'
   const effectiveDirection = mounted ? direction : 'ltr'
+  const effectivePlatformHeaderVariant = mounted ? platformHeaderVariant : 'default'
 
   const handleLocaleChange = React.useCallback((newLocale: Locale) => {
     document.cookie = `locale=${newLocale};path=/;max-age=31536000`
@@ -94,55 +101,86 @@ export function SettingsDrawer({ open, onOpenChange }: SettingsDrawerProps) {
             </div>
           </div>
 
-          {/* Sidebar Selection */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-primary">{t('sidebar')}</Label>
-            <div className="grid grid-cols-3 gap-2">
-              <SidebarCard
-                selected={effectiveSidebarVariant === 'inset'}
-                onClick={() => setSidebarVariant('inset')}
-                label={t('sidebarInset')}
-                variant="inset"
-              />
-              <SidebarCard
-                selected={effectiveSidebarVariant === 'floating'}
-                onClick={() => setSidebarVariant('floating')}
-                label={t('sidebarFloating')}
-                variant="floating"
-              />
-              <SidebarCard
-                selected={effectiveSidebarVariant === 'sidebar'}
-                onClick={() => setSidebarVariant('sidebar')}
-                label={t('sidebarDefault')}
-                variant="sidebar"
-              />
+          {/* Sidebar Selection - 仅在 showSidebarStyle 为 true 时显示 */}
+          {showSidebarStyle && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-primary">{t('sidebar')}</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <SidebarCard
+                  selected={effectiveSidebarVariant === 'inset'}
+                  onClick={() => setSidebarVariant('inset')}
+                  label={t('sidebarInset')}
+                  variant="inset"
+                />
+                <SidebarCard
+                  selected={effectiveSidebarVariant === 'floating'}
+                  onClick={() => setSidebarVariant('floating')}
+                  label={t('sidebarFloating')}
+                  variant="floating"
+                />
+                <SidebarCard
+                  selected={effectiveSidebarVariant === 'sidebar'}
+                  onClick={() => setSidebarVariant('sidebar')}
+                  label={t('sidebarDefault')}
+                  variant="sidebar"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Layout Selection */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium text-primary">{t('layout')}</Label>
-            <div className="grid grid-cols-3 gap-2">
-              <LayoutCard
-                selected={effectiveLayoutVariant === 'default'}
-                onClick={() => setLayoutVariant('default')}
-                label={t('layoutDefault')}
-                variant="default"
-              />
-              <LayoutCard
-                selected={effectiveLayoutVariant === 'compact'}
-                onClick={() => setLayoutVariant('compact')}
-                label={t('layoutCompact')}
-                variant="compact"
-              />
-              <LayoutCard
-                selected={effectiveLayoutVariant === 'full'}
-                onClick={() => setLayoutVariant('full')}
-                label={t('layoutFull')}
-                variant="full"
-              />
+          {/* Layout Selection - 仅在不显示中台 header 时显示 */}
+          {!showPlatformHeader && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-primary">{t('layout')}</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <LayoutCard
+                  selected={effectiveLayoutVariant === 'default'}
+                  onClick={() => setLayoutVariant('default')}
+                  label={t('layoutDefault')}
+                  variant="default"
+                />
+                <LayoutCard
+                  selected={effectiveLayoutVariant === 'compact'}
+                  onClick={() => setLayoutVariant('compact')}
+                  label={t('layoutCompact')}
+                  variant="compact"
+                />
+                <LayoutCard
+                  selected={effectiveLayoutVariant === 'full'}
+                  onClick={() => setLayoutVariant('full')}
+                  label={t('layoutFull')}
+                  variant="full"
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Platform Header Layout - 仅在 showPlatformHeader 为 true 时显示 */}
+          {showPlatformHeader && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-primary">{t('headerLayout')}</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <PlatformHeaderCard
+                  selected={effectivePlatformHeaderVariant === 'default'}
+                  onClick={() => setPlatformHeaderVariant('default')}
+                  label={t('headerDefault')}
+                  variant="default"
+                />
+                <PlatformHeaderCard
+                  selected={effectivePlatformHeaderVariant === 'centered'}
+                  onClick={() => setPlatformHeaderVariant('centered')}
+                  label={t('headerCentered')}
+                  variant="centered"
+                />
+                <PlatformHeaderCard
+                  selected={effectivePlatformHeaderVariant === 'minimal'}
+                  onClick={() => setPlatformHeaderVariant('minimal')}
+                  label={t('headerMinimal')}
+                  variant="minimal"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Direction Selection */}
           <div className="space-y-3">
@@ -383,6 +421,93 @@ function DirectionCard({
           <div className="flex-1 bg-white rounded-sm p-0.5 space-y-0.5">
             <div className={cn('h-0.5 w-2/3 bg-gray-300 rounded-full', variant === 'rtl' && 'ml-auto')} />
             <div className={cn('h-0.5 w-1/2 bg-gray-300 rounded-full', variant === 'rtl' && 'ml-auto')} />
+          </div>
+        </div>
+      </div>
+      <span className="text-[10px]">{label}</span>
+    </button>
+  )
+}
+
+// Platform Header Preview Card
+function PlatformHeaderCard({
+  selected,
+  onClick,
+  label,
+  variant,
+}: {
+  selected: boolean
+  onClick: () => void
+  label: string
+  variant: 'default' | 'centered' | 'minimal'
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'relative flex flex-col items-center gap-1.5 rounded-md border-2 p-1.5 transition-colors hover:bg-muted',
+        selected ? 'border-primary' : 'border-transparent'
+      )}
+    >
+      {selected && (
+        <div className="absolute -top-1 -right-1 rounded-full bg-primary p-0.5">
+          <Check className="h-2.5 w-2.5 text-primary-foreground" />
+        </div>
+      )}
+      <div className="w-full aspect-[5/3] rounded bg-gray-100 overflow-hidden p-0.5">
+        {/* Header bar */}
+        <div className="h-2 bg-white rounded-t-sm flex items-center px-0.5 gap-0.5 border-b border-gray-200">
+          {variant === 'default' && (
+            <>
+              {/* Logo left, nav left, actions right */}
+              <div className="w-1 h-1 bg-slate-600 rounded-sm" />
+              <div className="flex gap-0.5 ml-0.5">
+                <div className="w-2 h-0.5 bg-gray-400 rounded-full" />
+                <div className="w-2 h-0.5 bg-gray-400 rounded-full" />
+                <div className="w-2 h-0.5 bg-gray-400 rounded-full" />
+              </div>
+              <div className="ml-auto flex gap-0.5">
+                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+              </div>
+            </>
+          )}
+          {variant === 'centered' && (
+            <>
+              {/* Logo left, nav centered, actions right */}
+              <div className="w-1 h-1 bg-slate-600 rounded-sm" />
+              <div className="flex-1 flex justify-center gap-0.5">
+                <div className="w-2 h-0.5 bg-gray-400 rounded-full" />
+                <div className="w-2 h-0.5 bg-gray-400 rounded-full" />
+                <div className="w-2 h-0.5 bg-gray-400 rounded-full" />
+              </div>
+              <div className="flex gap-0.5">
+                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+              </div>
+            </>
+          )}
+          {variant === 'minimal' && (
+            <>
+              {/* Logo left, nav icons only, actions right */}
+              <div className="w-1 h-1 bg-slate-600 rounded-sm" />
+              <div className="flex gap-0.5 ml-0.5">
+                <div className="w-1 h-1 bg-gray-400 rounded-full" />
+                <div className="w-1 h-1 bg-gray-400 rounded-full" />
+                <div className="w-1 h-1 bg-gray-400 rounded-full" />
+              </div>
+              <div className="ml-auto flex gap-0.5">
+                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+              </div>
+            </>
+          )}
+        </div>
+        {/* Content area */}
+        <div className="flex-1 bg-white rounded-b-sm p-0.5">
+          <div className="flex gap-0.5 mt-0.5">
+            <div className="flex-1 h-2 bg-gray-200 rounded" />
+            <div className="flex-1 h-2 bg-gray-200 rounded" />
           </div>
         </div>
       </div>

@@ -87,6 +87,13 @@ class ResponseCode(IntEnum):
     CHUNK_NOT_FOUND = 6005
     DOCUMENT_PROCESSING = 6006
 
+    # 模型相关错误 (6100-6199)
+    MODEL_NOT_FOUND = 6100
+    TEAM_MODEL_NOT_FOUND = 6101
+    TEAM_MODEL_EXISTS = 6102
+    MODEL_QUOTA_EXCEEDED = 6103
+    MODEL_NOT_AUTHORIZED = 6104
+
 
 class BusinessError(Exception):
     """

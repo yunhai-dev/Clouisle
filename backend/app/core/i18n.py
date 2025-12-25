@@ -526,6 +526,43 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Model set as default successfully",
         "zh": "已设为默认模型",
     },
+    # Team Model Authorization messages
+    "team_model_authorized": {
+        "en": "Model authorized to team successfully",
+        "zh": "模型授权成功",
+    },
+    "team_model_updated": {
+        "en": "Team model authorization updated successfully",
+        "zh": "团队模型授权更新成功",
+    },
+    "team_model_revoked": {
+        "en": "Model authorization revoked successfully",
+        "zh": "模型授权已撤销",
+    },
+    "team_models_authorized": {
+        "en": "Models authorized to team successfully",
+        "zh": "批量授权成功",
+    },
+    "team_models_revoked": {
+        "en": "Model authorizations revoked successfully",
+        "zh": "批量撤销授权成功",
+    },
+    "team_model_not_found": {
+        "en": "Team model authorization not found",
+        "zh": "未找到团队模型授权",
+    },
+    "team_model_already_authorized": {
+        "en": "Model is already authorized to this team",
+        "zh": "该模型已被授权给此团队",
+    },
+    "model_not_authorized": {
+        "en": "Model is not authorized for this team",
+        "zh": "该模型未被授权给此团队",
+    },
+    "model_quota_exceeded": {
+        "en": "Model quota exceeded",
+        "zh": "模型配额已用尽",
+    },
     # Knowledge Base messages
     "kb_created": {
         "en": "Knowledge base created successfully",
@@ -615,6 +652,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "document_not_pending": {
         "en": "Document is not in pending status",
         "zh": "文档不是待处理状态",
+    },
+    "document_is_processing": {
+        "en": "Document is currently being processed, please wait",
+        "zh": "文档正在处理中，请稍候",
     },
     "task_dispatch_failed": {
         "en": "Failed to dispatch processing task. Please check if Redis is running.",

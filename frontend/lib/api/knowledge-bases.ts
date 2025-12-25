@@ -21,13 +21,28 @@ export interface TeamInfo {
   avatar_url?: string | null
 }
 
+export interface CreatorInfo {
+  id: string
+  username: string
+  avatar_url?: string | null
+}
+
+export interface EmbeddingModelInfo {
+  id: string
+  name: string
+  provider: string
+  model_id: string
+}
+
 export interface KnowledgeBase {
   id: string
   team: TeamInfo
+  created_by?: CreatorInfo | null
   name: string
   description: string | null
   icon: string | null
   embedding_model_id: string | null
+  embedding_model?: EmbeddingModelInfo | null
   settings: KnowledgeBaseSettings | null
   status: string
   document_count: number
@@ -74,7 +89,7 @@ export interface KnowledgeBaseQueryParams {
 
 // ============ Document Types ============
 
-export type DocumentStatus = 'pending' | 'processing' | 'completed' | 'failed'
+export type DocumentStatus = 'pending' | 'processing' | 'completed' | 'error'
 export type DocumentType = 'pdf' | 'docx' | 'doc' | 'txt' | 'md' | 'html' | 'csv' | 'xlsx' | 'xls' | 'json' | 'url'
 
 export interface Document {
@@ -83,6 +98,7 @@ export interface Document {
   name: string
   file_path: string | null
   file_size: number
+  source_url: string | null
   doc_type: DocumentType
   status: DocumentStatus
   chunk_count: number
@@ -280,7 +296,7 @@ export const knowledgeBasesApi = {
    * 导入 URL
    */
   importUrl: async (kbId: string, url: string, name?: string): Promise<Document> => {
-    return api.post<Document>(`/knowledge-bases/${kbId}/documents/url`, { url, name })
+    return api.post<Document>(`/knowledge-bases/${kbId}/documents/url`, { source_url: url, name })
   },
 
   /**
@@ -408,9 +424,32 @@ export const knowledgeBasesApi = {
   },
 
   /**
-   * 获取文档下载 URL
+   * 下载文档原文件
    */
-  getDocumentDownloadUrl: (kbId: string, docId: string): string => {
-    return `/api/v1/knowledge-bases/${kbId}/documents/${docId}/download`
+  downloadDocument: async (kbId: string, docId: string, filename: string): Promise<void> => {
+    const token = localStorage.getItem('access_token')
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+    const url = `${baseUrl}/knowledge-bases/${kbId}/documents/${docId}/download`
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+    
+    if (!response.ok) {
+      throw new Error('Download failed')
+    }
+    
+    const blob = await response.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(downloadUrl)
   },
 }

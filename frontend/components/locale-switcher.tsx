@@ -27,11 +27,18 @@ export function LocaleSwitcher({ showLabel = false }: LocaleSwitcherProps) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <Globe className="h-4 w-4" />
-        {showLabel && <span>{localeNames[locale as Locale]}</span>}
-        <span className="sr-only">Switch language</span>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={(props) => (
+          <button
+            {...props}
+            className="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          >
+            <Globe className="h-4 w-4" />
+            {showLabel && <span>{localeNames[locale as Locale]}</span>}
+            <span className="sr-only">Switch language</span>
+          </button>
+        )}
+      />
       <DropdownMenuContent align="end">
         {locales.map((l) => (
           <DropdownMenuItem
