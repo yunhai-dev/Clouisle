@@ -239,6 +239,31 @@ class InsufficientQuotaError(LLMError):
         )
 
 
+class QuotaExceededError(LLMError):
+    """团队配额超限"""
+
+    def __init__(
+        self,
+        message: str = "Team quota exceeded",
+        quota_type: str | None = None,
+        team_id: str | None = None,
+        model: str | None = None,
+        **kwargs,
+    ):
+        self.quota_type = quota_type
+        self.team_id = team_id
+        super().__init__(
+            message=message,
+            code="quota_exceeded",
+            model=model,
+            details={
+                "quota_type": quota_type,
+                "team_id": team_id,
+            },
+            **kwargs,
+        )
+
+
 class TaskNotFoundError(LLMError):
     """异步任务不存在 (视频生成等)"""
 

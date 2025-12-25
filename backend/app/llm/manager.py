@@ -3,6 +3,8 @@
 
 提供统一的 LLM 调用接口，从数据库加载模型配置，
 根据模型类型分发到对应的适配器。
+
+支持团队级调用，自动追踪 token 用量和配额检查。
 """
 
 import logging
@@ -20,7 +22,8 @@ from langchain_core.messages import (
     AIMessageChunk,
 )
 
-from app.models.model import Model, ModelType
+from app.models.model import Model, ModelType, TeamModel
+from app.services.usage_tracker import usage_tracker, QuotaExceededError
 
 from .adapters import (
     create_chat_model,
@@ -38,6 +41,7 @@ from .errors import (
     RateLimitError,
     ContextLengthError,
     ContentFilterError,
+    QuotaExceededError as LLMQuotaExceededError,
 )
 from .types import (
     Message,
@@ -307,6 +311,76 @@ class ModelManager:
                 model=model,
             )
 
+    async def _get_team_model(
+        self, team_id: str, model_id: str
+    ) -> tuple[Model, TeamModel]:
+        """
+        获取团队授权的模型
+
+        Args:
+            team_id: 团队 ID
+            model_id: 模型标识符
+
+        Returns:
+            (Model, TeamModel) 元组
+
+        Raises:
+            ModelNotFoundError: 找不到模型或团队未授权该模型
+            ModelDisabledError: 模型或团队授权已禁用
+        """
+        # 先获取模型配置
+        model_config = await self._get_model_config(model_id)
+
+        # 查找团队授权
+        team_model = await TeamModel.filter(
+            team_id=team_id, model_id=model_config.id
+        ).first()
+
+        if not team_model:
+            raise ModelNotFoundError(
+                message=f"Team {team_id} is not authorized to use model {model_config.name}",
+                model=str(model_config.id),
+            )
+
+        if not team_model.is_enabled:
+            raise ModelDisabledError(
+                message=f"Model {model_config.name} is disabled for team {team_id}",
+                model=str(model_config.id),
+            )
+
+        return model_config, team_model
+
+    async def _check_and_record_usage(
+        self,
+        team_id: str,
+        model_id: str,
+        tokens_used: int,
+        request_count: int = 1,
+    ) -> None:
+        """
+        检查配额并记录用量
+
+        Args:
+            team_id: 团队 ID
+            model_id: 模型 UUID
+            tokens_used: 使用的 token 数
+            request_count: 请求次数
+        """
+        try:
+            await usage_tracker.check_and_record_usage(
+                team_id=team_id,
+                model_id=model_id,
+                tokens_used=tokens_used,
+                request_count=request_count,
+            )
+        except QuotaExceededError as e:
+            raise LLMQuotaExceededError(
+                message=str(e),
+                quota_type=e.quota_type,
+                team_id=team_id,
+                model=model_id,
+            )
+
     # ==================== Chat 方法 ====================
 
     async def chat(
@@ -567,6 +641,214 @@ class ModelManager:
             raise
         except Exception as e:
             logger.exception(f"STT error: {e}")
+            raise self._handle_error(e, model_config.provider, model_config.model_id)
+
+    # ==================== 团队级 Chat 方法 (带用量追踪) ====================
+
+    async def team_chat(
+        self,
+        team_id: str,
+        messages: list[Message | dict],
+        model_id: str | None = None,
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
+    ) -> ChatResponse:
+        """
+        团队级 Chat 调用（带配额检查和用量追踪）
+
+        Args:
+            team_id: 团队 ID
+            messages: 消息列表
+            model_id: 模型 ID
+            tools: 工具定义列表
+            **kwargs: 额外参数
+
+        Returns:
+            ChatResponse: 响应对象
+
+        Raises:
+            QuotaExceededError: 配额超限
+            ModelNotFoundError: 团队未授权该模型
+        """
+        # 获取团队授权的模型
+        model_config, team_model = await self._get_team_model(team_id, model_id or "")
+
+        # 检查配额（使用已获取的 team_model，避免重复查询）
+        try:
+            await usage_tracker.check_quota_with_model(team_model)
+        except QuotaExceededError as e:
+            raise LLMQuotaExceededError(
+                message=str(e),
+                quota_type=e.quota_type,
+                team_id=team_id,
+                model=str(model_config.id),
+            )
+
+        # 调用模型
+        converted_messages: list[Message] = [
+            Message(**m) if isinstance(m, dict) else m for m in messages
+        ]
+
+        chat_model = create_chat_model(model_config)
+        lc_messages = self._convert_messages(converted_messages)
+        lc_tools = self._convert_tools(tools)
+
+        try:
+            model_to_invoke: BaseChatModel = chat_model
+            if lc_tools:
+                model_to_invoke = chat_model.bind_tools(lc_tools)  # type: ignore[assignment]
+
+            response = await model_to_invoke.ainvoke(lc_messages, **kwargs)
+            result = self._parse_response(response, model_config.model_id)
+
+            # 记录用量
+            await self._check_and_record_usage(
+                team_id=team_id,
+                model_id=str(model_config.id),
+                tokens_used=result.usage.total_tokens if result.usage else 0,
+            )
+
+            return result
+        except Exception as e:
+            logger.exception(f"Team chat error: {e}")
+            raise self._handle_error(e, model_config.provider, model_config.model_id)
+
+    async def team_chat_stream(
+        self,
+        team_id: str,
+        messages: list[Message | dict],
+        model_id: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """
+        团队级 Chat 流式调用（带配额检查和用量追踪）
+
+        注意：流式调用无法准确追踪 token 用量，
+        会在流结束后估算一个 token 数并记录。
+
+        Args:
+            team_id: 团队 ID
+            messages: 消息列表
+            model_id: 模型 ID
+            **kwargs: 额外参数
+
+        Yields:
+            ChatStreamChunk: 流式响应块
+        """
+        # 获取团队授权的模型
+        model_config, team_model = await self._get_team_model(team_id, model_id or "")
+
+        # 检查配额（使用已获取的 team_model，避免重复查询）
+        try:
+            await usage_tracker.check_quota_with_model(team_model)
+        except QuotaExceededError as e:
+            raise LLMQuotaExceededError(
+                message=str(e),
+                quota_type=e.quota_type,
+                team_id=team_id,
+                model=str(model_config.id),
+            )
+
+        converted_messages: list[Message] = [
+            Message(**m) if isinstance(m, dict) else m for m in messages
+        ]
+
+        chat_model = create_chat_model(model_config)
+        lc_messages = self._convert_messages(converted_messages)
+
+        try:
+            response_id = str(uuid.uuid4())
+            total_content = ""
+
+            async for chunk in chat_model.astream(lc_messages, **kwargs):
+                if isinstance(chunk, AIMessageChunk):
+                    content = chunk.content if isinstance(chunk.content, str) else ""
+                    total_content += content
+                    yield ChatStreamChunk(
+                        id=response_id,
+                        model=model_config.model_id,
+                        delta=ChatStreamDelta(content=content or None),
+                        finish_reason=None,
+                    )
+
+            # 估算 token 用量（简单估算：4 字符约 1 token）
+            # 计算输入 token（所有消息内容）
+            input_chars = sum(
+                len(m.content or "") if isinstance(m.content, str) else 0
+                for m in converted_messages
+            )
+            input_tokens = max(input_chars // 4, 1)
+            output_tokens = max(len(total_content) // 4, 1)
+            total_tokens = input_tokens + output_tokens
+
+            # 记录用量
+            await self._check_and_record_usage(
+                team_id=team_id,
+                model_id=str(model_config.id),
+                tokens_used=total_tokens,
+            )
+
+            # 最后一个块带 finish_reason
+            yield ChatStreamChunk(
+                id=response_id,
+                model=model_config.model_id,
+                delta=ChatStreamDelta(),
+                finish_reason=FinishReason.STOP,
+            )
+        except Exception as e:
+            logger.exception(f"Team chat stream error: {e}")
+            raise self._handle_error(e, model_config.provider, model_config.model_id)
+
+    async def team_embed(
+        self,
+        team_id: str,
+        texts: list[str],
+        model_id: str | None = None,
+    ) -> list[list[float]]:
+        """
+        团队级文本嵌入（带配额检查和用量追踪）
+
+        Args:
+            team_id: 团队 ID
+            texts: 文本列表
+            model_id: 模型 ID
+
+        Returns:
+            list[list[float]]: 嵌入向量列表
+        """
+        # 获取团队授权的模型
+        model_config, team_model = await self._get_team_model(team_id, model_id or "")
+
+        # 检查配额（使用已获取的 team_model，避免重复查询）
+        try:
+            await usage_tracker.check_quota_with_model(team_model)
+        except QuotaExceededError as e:
+            raise LLMQuotaExceededError(
+                message=str(e),
+                quota_type=e.quota_type,
+                team_id=team_id,
+                model=str(model_config.id),
+            )
+
+        embedding_model = create_embedding_model(model_config)
+
+        try:
+            result = await embedding_model.aembed_documents(texts)
+
+            # 估算 token 用量（embedding 模型按字符数估算）
+            total_chars = sum(len(t) for t in texts)
+            total_tokens = max(total_chars // 4, 1)
+
+            # 记录用量
+            await self._check_and_record_usage(
+                team_id=team_id,
+                model_id=str(model_config.id),
+                tokens_used=total_tokens,
+            )
+
+            return result
+        except Exception as e:
+            logger.exception(f"Team embedding error: {e}")
             raise self._handle_error(e, model_config.provider, model_config.model_id)
 
 

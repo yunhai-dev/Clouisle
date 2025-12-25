@@ -9,7 +9,7 @@ export default function WorkspacePage() {
   const t = useTranslations('platform')
 
   return (
-    <div className="container py-6">
+    <div className="py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t('workspace.title')}</h1>

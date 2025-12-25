@@ -38,6 +38,7 @@
     "roles": "Roles",
     "permissions": "Permissions",
     "models": "Models",
+    "workspace": "Workspace",
     "settings": "Settings",
     "siteSettings": "Site Settings",
     "helpCenter": "Help Center",
@@ -188,6 +189,9 @@
     "modelAuthRevoked": "Model authorization revoked",
     "editModelAuth": "Edit Authorization",
     "quotaSettings": "Quota Settings",
+    "tokenQuota": "Token Quota",
+    "requestQuota": "Request Quota",
+    "percentUsed": "{percent}% used",
     "dailyQuota": "Daily Quota",
     "monthlyQuota": "Monthly Quota",
     "dailyTokenLimit": "Daily Token Limit",
@@ -640,18 +644,55 @@
   },
   "platform": {
     "nav": {
+      "home": "Home",
       "workspace": "Apps",
       "kb": "Knowledge Bases",
       "tools": "Tools",
       "models": "Models"
     },
     "profile": "Profile",
-    "settings": "Settings",
+    "admin": "Admin Panel",
     "logout": "Log out",
     "logoutSuccess": "Logged out successfully",
     "teams": "Teams",
     "manageTeams": "Manage Teams",
     "noTeams": "No teams",
+    "profile": {
+      "title": "Profile",
+      "teamsDescription": "You have joined {count} teams"
+    },
+    "home": {
+      "title": "Dashboard",
+      "welcome": "Welcome back, {name}",
+      "welcomeDefault": "Welcome to Clouisle",
+      "description": "Manage your AI applications, knowledge bases, tools, and models",
+      "stats": {
+        "knowledgeBases": "Knowledge Bases",
+        "models": "Available Models",
+        "tools": "Tools",
+        "apps": "Applications"
+      },
+      "quickStart": "Quick Start",
+      "quickStartDescription": "Choose a feature to get started",
+      "features": {
+        "workspace": {
+          "title": "Application Workspace",
+          "description": "Create and manage your AI applications"
+        },
+        "kb": {
+          "title": "Knowledge Bases",
+          "description": "Upload documents and create knowledge bases"
+        },
+        "tools": {
+          "title": "Tool Center",
+          "description": "Configure and manage available tools"
+        },
+        "models": {
+          "title": "Model Management",
+          "description": "View and manage available AI models"
+        }
+      }
+    },
     "workspace": {
       "title": "Application Workspace",
       "description": "Create and manage your AI applications",
