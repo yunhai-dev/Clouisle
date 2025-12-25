@@ -184,12 +184,24 @@ async def list_knowledge_bases(
     )
 
     # 为每个知识库添加嵌入模型信息
+    # Collect all embedding model IDs and fetch them in one query
+    model_ids = [kb.embedding_model_id for kb in kbs if kb.embedding_model_id]
+    embedding_models = await Model.filter(id__in=model_ids).all()
+    model_map = {model.id: model for model in embedding_models}
+
     kb_list = []
     for kb in kbs:
         kb_data = KnowledgeBaseList.model_validate(kb).model_dump()
-        kb_data["embedding_model"] = await get_embedding_model_info(
-            kb.embedding_model_id
-        )
+        embedding_model = model_map.get(kb.embedding_model_id)
+        if embedding_model:
+            kb_data["embedding_model"] = EmbeddingModelInfo(
+                id=embedding_model.id,
+                name=embedding_model.name,
+                provider=embedding_model.provider,
+                model_id=embedding_model.model_id,
+            )
+        else:
+            kb_data["embedding_model"] = None
         kb_list.append(kb_data)
 
     return success(
@@ -1005,8 +1017,8 @@ async def reprocess_document(
             from app.core.celery import celery_app
 
             celery_app.control.revoke(old_task_id, terminate=True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to revoke old task {old_task_id}: {e}")
 
     # Reset status
     doc.status = DocumentStatus.PENDING.value

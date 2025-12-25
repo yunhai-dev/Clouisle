@@ -97,34 +97,7 @@ async def list_team_models(
         "-priority", "created_at"
     )
 
-    result = []
-    for auth in authorizations:
-        result.append(
-            {
-                "id": auth.id,
-                "team_id": auth.team_id,
-                "model_id": auth.model_id,
-                "model": {
-                    "id": auth.model.id,
-                    "name": auth.model.name,
-                    "provider": auth.model.provider,
-                    "model_id": auth.model.model_id,
-                    "model_type": auth.model.model_type,
-                },
-                "daily_token_limit": auth.daily_token_limit,
-                "monthly_token_limit": auth.monthly_token_limit,
-                "daily_request_limit": auth.daily_request_limit,
-                "monthly_request_limit": auth.monthly_request_limit,
-                "daily_tokens_used": auth.daily_tokens_used,
-                "monthly_tokens_used": auth.monthly_tokens_used,
-                "daily_requests_used": auth.daily_requests_used,
-                "monthly_requests_used": auth.monthly_requests_used,
-                "is_enabled": auth.is_enabled,
-                "priority": auth.priority,
-                "created_at": auth.created_at,
-                "updated_at": auth.updated_at,
-            }
-        )
+    result = [TeamModelResponse.model_validate(auth) for auth in authorizations]
 
     return success(data=result)
 
