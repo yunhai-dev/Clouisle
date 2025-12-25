@@ -562,6 +562,9 @@ cd frontend
 
 # ESLint
 bun run lint
+
+# Build Check (TypeScript & Next.js)
+bun run build
 ```
 
 ### Fix Commands

@@ -277,11 +277,13 @@ export function SearchTestClient({ knowledgeBaseId }: SearchTestClientProps) {
             
             {/* 高级设置按钮 */}
             <Popover open={showSettings} onOpenChange={setShowSettings}>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                  <Settings2 className="h-3.5 w-3.5" />
-                </Button>
-              </PopoverTrigger>
+              <PopoverTrigger
+                render={
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                    <Settings2 className="h-3.5 w-3.5" />
+                  </Button>
+                }
+              />
               <PopoverContent className="w-72" align="end">
                 <div className="grid gap-3">
                   {/* 搜索模式切换 */}

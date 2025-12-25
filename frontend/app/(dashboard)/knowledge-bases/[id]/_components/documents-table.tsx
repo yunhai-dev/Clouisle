@@ -183,7 +183,7 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
     { value: 'pending', label: t('statusPending') },
     { value: 'processing', label: t('statusProcessing') },
     { value: 'completed', label: t('statusCompleted') },
-    { value: 'failed', label: t('statusFailed') },
+    { value: 'error', label: t('statusFailed') },
   ]
   
   // 类型选项
@@ -326,7 +326,7 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
             {t('statusPending')}
           </Badge>
         )
-      case 'failed':
+      case 'error':
         return (
           <Badge variant="destructive" className="gap-1">
             <XCircle className="h-3 w-3" />
@@ -476,7 +476,7 @@ export function DocumentsTable({ knowledgeBaseId, refreshTrigger, onRefresh }: D
                           </DropdownMenuItem>
                         )}
                         
-                        {(doc.status === 'failed' || doc.status === 'completed') && (
+                        {(doc.status === 'error' || doc.status === 'completed') && (
                           <DropdownMenuItem onClick={() => handleReprocess(doc)}>
                             <RefreshCw className="mr-2 h-4 w-4" />
                             {t('reprocess')}

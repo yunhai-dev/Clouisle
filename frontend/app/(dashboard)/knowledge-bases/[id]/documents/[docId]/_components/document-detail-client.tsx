@@ -171,7 +171,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
           setDocument(docData)
           if (docData.status === 'completed') {
             toast.success(t('documentProcessed'))
-          } else if (docData.status === 'failed') {
+          } else if (docData.status === 'error') {
             toast.error(t('documentProcessFailed'))
           }
         } catch {
@@ -208,7 +208,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
             {t('statusPending')}
           </Badge>
         )
-      case 'failed':
+      case 'error':
         return (
           <Badge variant="destructive" className="gap-1">
             <XCircle className="h-3 w-3" />
@@ -400,7 +400,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
   const isPending = document.status === 'pending'
   const isCompleted = document.status === 'completed'
-  const isFailed = document.status === 'failed'
+  const isFailed = document.status === 'error'
   const isProcessingStatus = document.status === 'processing'
 
   return (
