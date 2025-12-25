@@ -673,12 +673,9 @@ class ModelManager:
         # 获取团队授权的模型
         model_config, team_model = await self._get_team_model(team_id, model_id or "")
 
-        # 检查配额（预检查，确保有足够配额再调用）
+        # 检查配额（使用已获取的 team_model，避免重复查询）
         try:
-            await usage_tracker.check_quota(
-                team_id=team_id,
-                model_id=str(model_config.id),
-            )
+            await usage_tracker.check_quota_with_model(team_model)
         except QuotaExceededError as e:
             raise LLMQuotaExceededError(
                 message=str(e),
@@ -741,12 +738,9 @@ class ModelManager:
         # 获取团队授权的模型
         model_config, team_model = await self._get_team_model(team_id, model_id or "")
 
-        # 检查配额
+        # 检查配额（使用已获取的 team_model，避免重复查询）
         try:
-            await usage_tracker.check_quota(
-                team_id=team_id,
-                model_id=str(model_config.id),
-            )
+            await usage_tracker.check_quota_with_model(team_model)
         except QuotaExceededError as e:
             raise LLMQuotaExceededError(
                 message=str(e),
@@ -825,12 +819,9 @@ class ModelManager:
         # 获取团队授权的模型
         model_config, team_model = await self._get_team_model(team_id, model_id or "")
 
-        # 检查配额
+        # 检查配额（使用已获取的 team_model，避免重复查询）
         try:
-            await usage_tracker.check_quota(
-                team_id=team_id,
-                model_id=str(model_config.id),
-            )
+            await usage_tracker.check_quota_with_model(team_model)
         except QuotaExceededError as e:
             raise LLMQuotaExceededError(
                 message=str(e),

@@ -28,22 +28,18 @@ def reset_daily_usage():
         current_time = get_now()
         today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # 查找需要重置的记录
-        team_models = await TeamModel.filter(daily_reset_at__lt=today_start).all()
+        # 使用批量更新，避免 N+1 查询问题
+        count = await TeamModel.filter(daily_reset_at__lt=today_start).update(
+            daily_tokens_used=0,
+            daily_requests_used=0,
+            daily_reset_at=current_time,
+        )
 
-        if not team_models:
+        if count > 0:
+            logger.info(f"Reset daily usage for {count} team models")
+        else:
             logger.info("No team models need daily usage reset")
-            return 0
 
-        count = 0
-        for tm in team_models:
-            tm.daily_tokens_used = 0
-            tm.daily_requests_used = 0
-            tm.daily_reset_at = current_time
-            await tm.save()
-            count += 1
-
-        logger.info(f"Reset daily usage for {count} team models")
         return count
 
     loop = asyncio.get_event_loop()
@@ -64,22 +60,18 @@ def reset_monthly_usage():
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
-        # 查找需要重置的记录
-        team_models = await TeamModel.filter(monthly_reset_at__lt=month_start).all()
+        # 使用批量更新，避免 N+1 查询问题
+        count = await TeamModel.filter(monthly_reset_at__lt=month_start).update(
+            monthly_tokens_used=0,
+            monthly_requests_used=0,
+            monthly_reset_at=current_time,
+        )
 
-        if not team_models:
+        if count > 0:
+            logger.info(f"Reset monthly usage for {count} team models")
+        else:
             logger.info("No team models need monthly usage reset")
-            return 0
 
-        count = 0
-        for tm in team_models:
-            tm.monthly_tokens_used = 0
-            tm.monthly_requests_used = 0
-            tm.monthly_reset_at = current_time
-            await tm.save()
-            count += 1
-
-        logger.info(f"Reset monthly usage for {count} team models")
         return count
 
     loop = asyncio.get_event_loop()
