@@ -13,6 +13,12 @@ import { PendingAskUserForm, type PendingAskUserFormProps } from './ask-user-for
 import { VariableForm } from './variable-form'
 import type { ChatMessage, ChatPreviewPayload, MessagePart } from './types'
 import type { RunVariableDefinition } from '@/lib/utils/extract-variables'
+type PreviewCanvasProps = {
+  preview: ChatPreviewPayload
+  onClose: () => void
+}
+
+type PreviewCanvasComponent = React.ComponentType<PreviewCanvasProps>
 
 type ImageReference = {
   asset_ref: string
@@ -225,6 +231,16 @@ export function AgentChatSurface({
     isFilledRequiredVariable(variable, variableValues[variable.name])
   )).length
   const hasPendingAskUser = Boolean(pendingAskUserToolCallId)
+  const [preview, setPreview] = React.useState<ChatPreviewPayload | null>(null)
+  const [PreviewCanvas, setPreviewCanvas] = React.useState<PreviewCanvasComponent | null>(null)
+
+  const handleOpenCodePreview = (payload: ChatPreviewPayload) => {
+    onOpenCodePreview?.(payload)
+    setPreview(payload)
+    void import('./code-preview-canvas')
+      .then(({ CodePreviewCanvas }) => setPreviewCanvas(() => CodePreviewCanvas))
+      .catch(() => setPreview(null))
+  }
 
   const variablePanel = hasVisibleVariables && onVariablesChange ? (
     <div className="mx-auto w-full max-w-3xl px-4">
@@ -267,7 +283,7 @@ export function AgentChatSurface({
   ) : null
 
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
+    <div className={cn('relative flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       <ChatContainer
         messages={messages}
         isStreaming={isStreaming}
@@ -280,7 +296,7 @@ export function AgentChatSurface({
         onEditMessage={onEditMessage}
         onSwitchVersion={onSwitchVersion}
         onSelectImageReference={onSelectImageReference}
-        onOpenCodePreview={onOpenCodePreview}
+        onOpenCodePreview={handleOpenCodePreview}
         hideToolCalls={hideToolCalls}
         hideMessageActions={hideMessageActions}
         hideReasoning={hideReasoning}
@@ -321,6 +337,11 @@ export function AgentChatSurface({
           <p className="mt-2 text-center text-[11px] text-muted-foreground">{poweredByText}</p>
         )}
       </div>
+      {preview && PreviewCanvas && (
+        <div className="absolute inset-0 z-20 bg-background">
+          <PreviewCanvas preview={preview} onClose={() => setPreview(null)} />
+        </div>
+      )}
     </div>
   )
 }

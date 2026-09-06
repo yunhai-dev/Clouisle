@@ -1,4 +1,4 @@
-// GENERATED — 2026-08-31T02:51:53.462Z
+// GENERATED — 2026-09-06T11:41:22.943Z
 // Source: i18n/en/apiKeys.json
 export type ApiKeysMessages = {
   apiKeys: {

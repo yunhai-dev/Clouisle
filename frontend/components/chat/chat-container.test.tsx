@@ -13,7 +13,14 @@ const artifactListProps: Array<{
 mock.module('next-intl', () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) => `${key}:${values?.count ?? ''}`,
 }))
-mock.module('lucide-react', () => ({ ArrowDown: () => <svg data-icon="arrow-down" /> }))
+mock.module('lucide-react', () => ({
+  ArrowDown: () => <svg data-icon="arrow-down" />,
+  Expand: () => <svg data-icon="expand" />,
+  ZoomIn: () => <svg data-icon="zoom-in" />,
+  ZoomOut: () => <svg data-icon="zoom-out" />,
+  Download: () => <svg data-icon="download" />,
+  X: () => <svg data-icon="x" />,
+}))
 mock.module('@/components/ui/button', () => ({
   Button: ({ children, ...props }: React.ComponentProps<'button'>) => <button {...props}>{children}</button>,
 }))
@@ -209,6 +216,54 @@ describe('ChatContainer', () => {
     expect(messageProps.every((props) => props.pendingAskUserToolCallId === undefined)).toBe(true)
     expect(messageProps.every((props) => props.onSubmitAskUser === undefined)).toBe(true)
     expect(messageProps.every((props) => props.onOpenCodePreview === onOpenCodePreview)).toBe(true)
+  })
+  test('hides artifact list while message is streaming or loading and shows it once completed', () => {
+    const artifactMessage: ChatMessage = {
+      id: 'assistant-tool-artifact',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-call',
+          toolCallId: 'call-art',
+          toolName: 'artifact',
+          input: {},
+        },
+        {
+          type: 'tool-result',
+          toolCallId: 'call-art',
+          toolName: 'artifact',
+          output: { artifacts: [{ filename: 'chart.svg', url: '/files/chart.svg', type: 'file', mimeType: 'image/svg+xml' }] },
+        },
+      ],
+    }
+
+    // 1. Streaming state -> hidden
+    const streamingHtml = renderContainer(
+      <ChatContainer
+        messages={[artifactMessage]}
+        isStreaming
+      />,
+    )
+    expect(streamingHtml).not.toContain('data-artifact-file-list')
+
+    // 2. Loading metadata state -> hidden
+    const loadingHtml = renderContainer(
+      <ChatContainer
+        messages={[{ ...artifactMessage, metadata: { isLoading: true } }]}
+        isStreaming={false}
+      />,
+    )
+    expect(loadingHtml).not.toContain('data-artifact-file-list')
+
+    // 3. Settled complete message -> visible
+    const completedHtml = renderContainer(
+      <ChatContainer
+        messages={[artifactMessage]}
+        isStreaming={false}
+      />,
+    )
+    expect(completedHtml).toContain('data-artifact-file-list')
+    expect(completedHtml).toContain('chart.svg')
   })
   test('withholds editing until a user message is persisted and the run is idle', () => {
     const onEditMessage = mock(() => Promise.resolve())

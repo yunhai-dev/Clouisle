@@ -308,22 +308,24 @@ async def test_worker_loss_marks_interrupted(monkeypatch, fake_redis):
     stale_run = _fake_run(status=AgentRunStatus.RUNNING)
     stale_run.started_at = datetime.now(UTC) - timedelta(minutes=10)
     stale_run.conversation_id = uuid4()
-    transitioned = AsyncMock(return_value=stale_run)
 
     async def _all():
         return [stale_run]
 
-    monkeypatch.setattr(
-        store.AgentRun, "filter", lambda **_k: SimpleNamespace(all=_all)
-    )
-    monkeypatch.setattr(store, "transition_run", transitioned)
+    async def _update(**_kwargs):
+        return 1
+
+    def _filter(**kwargs):
+        if "status__in" in kwargs:
+            return SimpleNamespace(all=_all)
+        return SimpleNamespace(update=_update)
+
+    monkeypatch.setattr(store.AgentRun, "filter", _filter)
 
     # Lock key absent -> not owned -> interrupted exactly once.
     marked = await store.mark_expired_runs_interrupted(max_age_seconds=120)
     assert marked == 1
-    transitioned.assert_awaited_once()
-    args = transitioned.await_args.args
-    assert args[1] == AgentRunStatus.INTERRUPTED
+    assert stale_run.status == AgentRunStatus.INTERRUPTED
 
 
 @pytest.mark.asyncio

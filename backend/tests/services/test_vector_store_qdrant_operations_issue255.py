@@ -61,6 +61,7 @@ async def test_qdrant_client_is_created_once(monkeypatch):
     factory.assert_called_once_with(
         url=vector_store.settings.QDRANT_URL,
         api_key=vector_store.settings.QDRANT_API_KEY,
+        timeout=60.0,
     )
 
 
@@ -510,7 +511,14 @@ async def test_store_chunks_batches_records_payloads_and_propagates_qdrant_failu
     monkeypatch.setattr(vector_store.DocumentChunk, "create", create_chunk)
     store = VectorStore()
     monkeypatch.setattr(
-        store, "embed_texts", AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
+        store,
+        "embed_texts",
+        AsyncMock(
+            side_effect=[
+                [[0.1, 0.2], [0.3, 0.4]],
+                [[0.1, 0.2]],
+            ]
+        ),
     )
     ensure_dimension = AsyncMock()
     monkeypatch.setattr(vector_store, "_ensure_kb_dimension", ensure_dimension)
@@ -698,7 +706,7 @@ async def test_embedding_storage_dimension_boundaries(monkeypatch):
     assert store._detected_dimension == 2
     assert client.upsert.await_args.kwargs["points"][0].payload == {}
 
-    with pytest.raises(ValueError, match="Cannot determine embedding dimension"):
+    with pytest.raises(ValueError, match="Embedding vectors must not be empty"):
         await VectorStore()._batch_store_embeddings([uuid4()], [[]])
 
 

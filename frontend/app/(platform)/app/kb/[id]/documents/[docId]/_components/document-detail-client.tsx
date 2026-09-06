@@ -33,6 +33,7 @@ import {
   type KnowledgeBase,
   type ChunkPreviewItem,
 } from '@/lib/api'
+import { FilePreviewPanel, getDocumentMimeType } from '@/components/file-preview'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -97,6 +98,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
   // 预览状态
   const [isPreviewMode, setIsPreviewMode] = React.useState(false)
+  const [isOriginalPreviewOpen, setIsOriginalPreviewOpen] = React.useState(false)
   const [isPreviewing, setIsPreviewing] = React.useState(false)
   const [previewChunks, setPreviewChunks] = React.useState<ChunkPreviewItem[]>([])
   const [previewStats, setPreviewStats] = React.useState<{
@@ -139,6 +141,9 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
       setIsLoading(false)
     }
   }, [knowledgeBaseId, documentId, router])
+  const loadOriginalFile = React.useCallback(() => {
+    return knowledgeBasesApi.getDocumentFile(knowledgeBaseId, documentId)
+  }, [knowledgeBaseId, documentId])
 
   // 加载分块
   const loadChunks = React.useCallback(async () => {
@@ -547,6 +552,17 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
 
         <div className="flex items-center gap-2 shrink-0">
           {getStatusBadge(document.status)}
+          {document.doc_type !== 'url' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsOriginalPreviewOpen(true)}
+              aria-label={t('previewOriginal')}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              {t('previewOriginal')}
+            </Button>
+          )}
           {(isCompleted || isFailed) && (
             <Button variant="outline" size="sm" onClick={handleReprocess}>
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -567,7 +583,7 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
       {/* 两栏内容区 */}
       <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
         {/* 左侧：分块列表 */}
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden rounded-xl border bg-card">
+        <div className="relative flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden rounded-xl border bg-card">
           {/* 分块内容区 */}
           <div className="flex-1 min-w-0 overflow-hidden">
           {isPending && !isPreviewMode && (
@@ -903,6 +919,34 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
             </>
           )}
         </div>
+        {isOriginalPreviewOpen && (
+          <div className="absolute inset-0 z-10 bg-background">
+            <FilePreviewPanel
+              file={{
+                filename: document.name,
+                mimeType: getDocumentMimeType(document.name, document.doc_type),
+                size: document.file_size,
+              }}
+              loadFile={loadOriginalFile}
+              onClose={() => setIsOriginalPreviewOpen(false)}
+              labels={{
+                title: t('previewOriginalTitle'),
+                loading: t('previewOriginalLoading'),
+                unavailable: t('previewOriginalUnavailable'),
+                loadError: t('previewOriginalLoadError'),
+                tooLarge: t('previewOriginalTooLarge'),
+                download: t('downloadOriginal'),
+                close: t('previewOriginalClose'),
+                sheet: t('previewOriginalSheet'),
+                rowsLimited: ({ rows, columns }) => t('previewOriginalRowsLimited', { rows, columns }),
+                parseError: t('previewOriginalParseError'),
+                zoomIn: t('previewOriginalZoomIn'),
+                zoomOut: t('previewOriginalZoomOut'),
+                fitToView: t('previewOriginalFitToView'),
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* 右侧：设置面板 */}

@@ -30,6 +30,10 @@ mock.module('lucide-react', () => ({
   Link: (props: { className?: string }) => icon({ ...props, name: 'Link' }),
   Download: (props: { className?: string }) => icon({ ...props, name: 'Download' }),
   Eye: (props: { className?: string }) => icon({ ...props, name: 'Eye' }),
+  Expand: (props: { className?: string }) => icon({ ...props, name: 'Expand' }),
+  ZoomIn: (props: { className?: string }) => icon({ ...props, name: 'ZoomIn' }),
+  ZoomOut: (props: { className?: string }) => icon({ ...props, name: 'ZoomOut' }),
+  X: (props: { className?: string }) => icon({ ...props, name: 'X' }),
 }))
 
 const { ArtifactFile, ArtifactFileList } = await import('./artifact-file-list')
@@ -88,13 +92,18 @@ test('shows three artifacts by default and expands the remaining files', () => {
   }
 })
 
-test('does not render preview for unsupported artifacts or without a callback', () => {
-  const unsupported: FilePart = { type: 'file', filename: 'report.docx', url: '/files/report.docx' }
-  const unsupportedHtml = renderToStaticMarkup(<ArtifactFileList files={[unsupported]} onOpenPreview={() => {}} />)
+test('renders preview for supported documents and omits it without a callback', () => {
+  const supported: FilePart = {
+    type: 'file',
+    filename: 'report.docx',
+    url: '/files/report.docx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  }
+  const supportedHtml = renderToStaticMarkup(<ArtifactFileList files={[supported]} onOpenPreview={() => {}} />)
   const noCallbackHtml = renderToStaticMarkup(<ArtifactFileList files={[report]} />)
 
-  expect(unsupportedHtml).not.toContain('aria-label="Preview: report.docx"')
-  expect(unsupportedHtml).toContain('download="report.docx"')
+  expect(supportedHtml).toContain('aria-label="Preview: report.docx"')
+  expect(supportedHtml).toContain('download="report.docx"')
   expect(noCallbackHtml).not.toContain('aria-label="Preview: report.csv"')
   expect(noCallbackHtml).toContain('download="report.csv"')
 })

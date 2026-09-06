@@ -399,7 +399,7 @@ export function NotificationsClient({ onReadUpdated }: NotificationsClientProps)
                 </div>
                 <div className={cn(
                   'min-h-0 flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-6 text-sm text-foreground',
-                  meta.isAnnouncement && 'border-amber-500/50 bg-amber-500/10',
+                  meta.isAnnouncement && 'border-amber-500/50',
                 )} data-color-mode={colorMode}>
                   <div className="wmde-markdown">
                     <MDPreview source={selectedItem.content} />

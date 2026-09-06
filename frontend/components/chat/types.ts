@@ -241,6 +241,12 @@ export interface ArtifactPreviewPayload {
   kind: 'artifact'
   file: FilePart
 }
+export interface FilePreviewPayload {
+  id: string
+  kind: 'file'
+  file: FilePart
+}
+
 
 export interface SourceDocumentPreviewPayload {
   id: string
@@ -250,7 +256,7 @@ export interface SourceDocumentPreviewPayload {
   segments: SourceDocumentPart[]
 }
 
-export type ChatPreviewPayload = CodePreviewPayload | ArtifactPreviewPayload | SourceDocumentPreviewPayload
+export type ChatPreviewPayload = CodePreviewPayload | ArtifactPreviewPayload | FilePreviewPayload | SourceDocumentPreviewPayload
 
 /**
  * Suggested question/action

@@ -172,6 +172,23 @@ def _get_embedding_error(
     )
 
 
+def _get_chunk_error(
+    document: Document, chunk: DocumentChunk, user_locale: str = "en"
+) -> str:
+    """Return a useful failure detail without exposing the internal sentinel."""
+    error_message = getattr(chunk, "error_message", None)
+    metadata = getattr(chunk, "metadata", None) or {}
+    detail = metadata.get("error_detail") if isinstance(metadata, dict) else None
+    if error_message and error_message != "document_process_failed":
+        return str(error_message)
+    if detail:
+        return str(detail)
+    return t(
+        "unknown_error_generic",
+        lang=_get_document_error_lang(document, user_locale),
+    )
+
+
 def _is_stale_task(document: Document, task_id: str | None) -> bool:
     return bool(task_id) and (document.metadata or {}).get("task_id") not in (
         None,
@@ -501,7 +518,11 @@ async def _process_document(document_id: str, task_id: str | None) -> dict[str, 
             await document.save(update_fields=["metadata"])
 
         created_chunks = await vector_store.store_chunks_with_progress(
-            document, chunks, kb_id=kb.id, progress_callback=_update_progress
+            document,
+            chunks,
+            kb_id=kb.id,
+            progress_callback=_update_progress,
+            batch_size=25,
         )
         logger.info(
             f"Document {document_id} embeddings stored, chunks={len(created_chunks)}"
@@ -521,10 +542,15 @@ async def _process_document(document_id: str, task_id: str | None) -> dict[str, 
         if failed_chunks and not embedded_chunks:
             # All failed
             document.status = DocumentStatus.ERROR.value
+            first_error = (
+                _get_chunk_error(document, failed_chunks[0], user_locale)
+                if failed_chunks
+                else t("unknown_error_generic", lang=user_locale)
+            )
             document.error_message = t(
                 "all_chunks_failed_to_embed",
                 lang=user_locale,
-                error=t("unknown_error_generic", lang=user_locale),
+                error=first_error,
             )[:500]
             document.chunk_count = len(created_chunks)
             document.token_count = total_tokens
@@ -547,12 +573,17 @@ async def _process_document(document_id: str, task_id: str | None) -> dict[str, 
         if failed_chunks:
             # Partial failure
             document.status = DocumentStatus.ERROR.value
+            first_error = (
+                _get_chunk_error(document, failed_chunks[0], user_locale)
+                if failed_chunks
+                else t("unknown_error_generic", lang=user_locale)
+            )
             document.error_message = t(
                 "chunks_failed_to_embed",
                 lang=user_locale,
                 failed_count=len(failed_chunks),
                 total_chunks=len(created_chunks),
-                error=t("unknown_error_generic", lang=user_locale),
+                error=first_error,
             )[:500]
         else:
             document.status = DocumentStatus.COMPLETED.value
@@ -907,9 +938,8 @@ def rechunk_document_task(self, document_id: str) -> dict:
                 chunks,
                 kb_id=kb.id,
                 progress_callback=_update_rechunk_progress,
+                batch_size=25,
             )
-
-            # Check for failed chunks
             failed_chunks = [c for c in created_chunks if c.status == "failed"]
             total_tokens = sum(c.token_count for c in created_chunks)
 
@@ -1114,22 +1144,39 @@ async def _embed_existing_document_chunks(
         last_error: str | None = None
         total_chunks = len(chunks)
         total_tokens = sum(chunk.token_count for chunk in chunks)
-        for chunk in chunks:
-            if chunk.status == "embedded":
-                continue
+        chunks_to_embed = [c for c in chunks if c.status != "embedded"]
+        CHUNK_BATCH_SIZE = 25
+        for i in range(0, len(chunks_to_embed), CHUNK_BATCH_SIZE):
+            batch = chunks_to_embed[i : i + CHUNK_BATCH_SIZE]
             try:
-                await vector_store.add_chunk_vector(kb_id, chunk)
-                chunk.status = "embedded"
-                chunk.error_message = cast(Any, None)
-                await chunk.save(update_fields=["status", "error_message"])
-                embedded_count += 1
-            except Exception as e:
-                failed_count += 1
-                last_error = _get_embedding_error(document, e, user_locale)
-                chunk.status = "failed"
-                chunk.error_message = last_error[:500]
-                await chunk.save(update_fields=["status", "error_message"])
-                logger.exception("Failed to embed chunk %s", chunk.id)
+                embedded_batch = await vector_store.add_chunk_vectors_batch(
+                    kb_id, batch
+                )
+                embedded_count += len(embedded_batch)
+            except DimensionMismatchError:
+                raise
+            except Exception as batch_exc:
+                logger.warning(
+                    "Batch embed failed for document %s, falling back to per-chunk: %s",
+                    document_id,
+                    batch_exc,
+                )
+                for chunk in batch:
+                    try:
+                        await vector_store.add_chunk_vector(kb_id, chunk)
+                        chunk.status = "embedded"
+                        chunk.error_message = cast(Any, None)
+                        await chunk.save(update_fields=["status", "error_message"])
+                        embedded_count += 1
+                    except DimensionMismatchError:
+                        raise
+                    except Exception as e:
+                        failed_count += 1
+                        last_error = _get_embedding_error(document, e, user_locale)
+                        chunk.status = "failed"
+                        chunk.error_message = last_error[:500]
+                        await chunk.save(update_fields=["status", "error_message"])
+                        logger.exception("Failed to embed chunk %s", chunk.id)
 
             document.metadata = document.metadata or {}
             document.metadata["embed_progress"] = {
@@ -1250,6 +1297,27 @@ async def _embed_existing_document_chunks(
             "total_chunks": len(chunks),
         }
 
+    except DimensionMismatchError as e:
+        logger.error(f"Dimension mismatch for document {document_id}: {e}")
+        document.status = DocumentStatus.ERROR.value
+        _clear_task_metadata(document)
+        document.error_message = _get_dimension_mismatch_error(document, user_locale)[
+            :500
+        ]
+        await document.save()
+        await _send_doc_failed_notification(
+            document=document,
+            kb_name=kb.name,
+            team_id=kb_team_id,
+            error=document.error_message,
+            user_locale=user_locale,
+        )
+        return {
+            "status": "error",
+            "document_id": document_id,
+            "message": document.error_message,
+            "error_type": "dimension_mismatch",
+        }
     except Exception as e:
         logger.exception(f"Error embedding document {document_id}: {e}")
 
@@ -1381,21 +1449,38 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
             still_failed = 0
             last_error = None
 
-            for chunk in failed_chunks:
+            CHUNK_BATCH_SIZE = 25
+            for i in range(0, len(failed_chunks), CHUNK_BATCH_SIZE):
+                batch = failed_chunks[i : i + CHUNK_BATCH_SIZE]
                 try:
-                    await vector_store.add_chunk_vector(kb.id, chunk)
-                    chunk.status = "embedded"
-                    chunk.error_message = None
-                    await chunk.save(update_fields=["status", "error_message"])
-                    embedded_count += 1
-                except Exception as e:
-                    still_failed += 1
-                    last_error = _get_embedding_error(document, e, user_locale)
-                    chunk.error_message = last_error[:500]
-                    await chunk.save(update_fields=["error_message"])
-                    logger.exception("Retry failed for chunk %s", chunk.id)
+                    embedded_batch = await vector_store.add_chunk_vectors_batch(
+                        kb.id, batch
+                    )
+                    embedded_count += len(embedded_batch)
+                except DimensionMismatchError:
+                    raise
+                except Exception as batch_exc:
+                    logger.warning(
+                        "Batch retry failed for document %s, falling back to per-chunk: %s",
+                        document_id,
+                        batch_exc,
+                    )
+                    for chunk in batch:
+                        try:
+                            await vector_store.add_chunk_vector(kb.id, chunk)
+                            chunk.status = "embedded"
+                            chunk.error_message = None
+                            await chunk.save(update_fields=["status", "error_message"])
+                            embedded_count += 1
+                        except DimensionMismatchError:
+                            raise
+                        except Exception as e:
+                            still_failed += 1
+                            last_error = _get_embedding_error(document, e, user_locale)
+                            chunk.error_message = last_error[:500]
+                            await chunk.save(update_fields=["error_message"])
+                            logger.exception("Retry failed for chunk %s", chunk.id)
 
-                # Update progress
                 document.metadata = document.metadata or {}
                 document.metadata["embed_progress"] = {
                     "embedded": embedded_count,
@@ -1403,7 +1488,6 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
                     "total": total_chunks,
                 }
                 await document.save(update_fields=["metadata"])
-
             # Clear progress
             document.metadata = document.metadata or {}
             _clear_task_metadata(document)
@@ -1470,6 +1554,29 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
                 "total_chunks": total_chunks,
             }
 
+        except DimensionMismatchError as e:
+            logger.error(
+                f"Dimension mismatch retrying failed chunks for document {document_id}: {e}"
+            )
+            document.status = DocumentStatus.ERROR.value
+            _clear_task_metadata(document)
+            document.error_message = _get_dimension_mismatch_error(
+                document, user_locale
+            )[:500]
+            await document.save()
+            await _send_doc_failed_notification(
+                document=document,
+                kb_name=kb.name,
+                team_id=kb.team_id,
+                error=document.error_message,
+                user_locale=user_locale,
+            )
+            return {
+                "status": "error",
+                "document_id": document_id,
+                "message": document.error_message,
+                "error_type": "dimension_mismatch",
+            }
         except Exception as e:
             logger.exception(
                 f"Error retrying failed chunks for document {document_id}: {e}"

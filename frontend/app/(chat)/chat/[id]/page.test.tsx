@@ -6,9 +6,11 @@ const push = mock()
 const getPublicAgent = mock()
 const getConversations = mock()
 const getConversation = mock()
+const getRunStatus = mock()
 const deleteConversation = mock()
 const updateConversation = mock()
 const uploadFileWithProgress = mock()
+const getStoredRunSnapshot = mock(() => null as { runId: string; lastSequence: number } | null)
 const convertBackendMessages = mock((messages: unknown[]) => messages.map((message, index) => ({ id: `converted-${index}`, role: 'user', content: String(message) })))
 const sendMessage = mock()
 const regenerate = mock()
@@ -24,6 +26,12 @@ const disconnect = mock()
 const observe = mock()
 const historyPush = mock()
 const historyReplace = mock()
+const clearInterval = mock()
+const setIntervalMock = mock((callback: () => void) => {
+  intervalCallbacks.push(callback)
+  return 0
+})
+let intervalCallbacks: Array<() => void> = []
 let token: string | null = 'token'
 let query = new URLSearchParams()
 let chatState = {
@@ -36,7 +44,7 @@ let chatState = {
   submitAskUser: undefined as ((toolCallId: string, answer: { answers: Record<string, unknown>; skipped?: boolean }) => Promise<void>) | undefined,
 }
 let chatOptions: {
-  onConversationChange?: () => void
+  onConversationChange?: (conversationId: string) => void
   onStreamEnd?: () => void
 } = {}
 let variableValues: Record<string, unknown> = {}
@@ -73,13 +81,16 @@ mock.module('@/lib/api', () => ({
     getMessageVersions: mock(() => Promise.resolve([])),
     switchMessageVersion: mock(() => Promise.resolve()),
   },
-  publicAgentsApi: { getPublicAgent, getConversations, getConversation, deleteConversation, updateConversation },
+  publicAgentsApi: { getPublicAgent, getConversations, getConversation, getRunStatus, deleteConversation, updateConversation },
   uploadApi: { uploadFileWithProgress },
 }))
 mock.module('@/lib/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }))
 mock.module('@/lib/utils/message-converter', () => ({ convertBackendMessages }))
+const removeRunSnapshot = mock(() => {})
 mock.module('@/hooks/use-chat', () => ({
-  useChat: (options: { onConversationChange?: () => void }) => {
+  getStoredRunSnapshot,
+  removeRunSnapshot,
+  useChat: (options: { onConversationChange?: (conversationId: string) => void }) => {
     chatOptions = options
     return {
       ...chatState, sendMessage, regenerate, editMessage, switchVersion, stop, reset: resetChat,
@@ -185,7 +196,12 @@ beforeEach(() => {
   pendingAskUserFormProps = {}
   observerCallback = undefined
   faviconHref = null
-  for (const fn of [push, getPublicAgent, getConversations, getConversation, deleteConversation, updateConversation, uploadFileWithProgress, convertBackendMessages, sendMessage, regenerate, editMessage, switchVersion, stop, resetChat, setMessages, setConversationId, validateVariables, toastError, disconnect, observe, historyPush, historyReplace]) fn.mockReset()
+  for (const fn of [push, getPublicAgent, getConversations, getConversation, getRunStatus, deleteConversation, updateConversation, uploadFileWithProgress, getStoredRunSnapshot, removeRunSnapshot, convertBackendMessages, sendMessage, regenerate, editMessage, switchVersion, stop, resetChat, setMessages, setConversationId, validateVariables, toastError, disconnect, observe, historyPush, historyReplace, clearInterval, setIntervalMock]) fn.mockReset()
+  setIntervalMock.mockImplementation((callback: () => void) => {
+    intervalCallbacks.push(callback)
+    return 0
+  })
+  getStoredRunSnapshot.mockImplementation(() => null)
   validateVariables.mockReturnValue(true)
   convertBackendMessages.mockImplementation((messages: unknown[]) => messages.map((message, index) => ({ id: `converted-${index}`, role: 'user', content: String(message) })))
   getPublicAgent.mockResolvedValue(agent)
@@ -196,6 +212,11 @@ beforeEach(() => {
   sendMessage.mockResolvedValue(undefined)
   uploadFileWithProgress.mockResolvedValue({ url: 'https://files.example.test/safe.pdf' })
 
+  intervalCallbacks = []
+  Object.defineProperties(globalThis, {
+    setInterval: { configurable: true, value: setIntervalMock },
+    clearInterval: { configurable: true, value: clearInterval },
+  })
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: mock(() => token) } })
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
@@ -313,6 +334,65 @@ describe('PublicChatPage', () => {
     expect(output()).not.toContain('runStatusWaiting')
   })
 
+  test('shows a loading indicator for conversations with an active durable run', async () => {
+    getStoredRunSnapshot.mockImplementation((agentId: string, conversationId: string) => (
+      agentId === 'agent-1' && conversationId === 'conv-1' ? { runId: 'run-1', lastSequence: 0 } : null
+    ))
+    getRunStatus.mockResolvedValue({ status: 'running' })
+
+    render()
+    await flush()
+
+    expect(getRunStatus).toHaveBeenCalledWith('agent-1', 'run-1')
+    expect(renderer!.root.findAllByType('i').filter((node) => node.props.className === 'h-4 w-4 shrink-0 animate-spin text-muted-foreground')).toHaveLength(1)
+  })
+
+  test('removes stored snapshot for completed background conversation', async () => {
+    getStoredRunSnapshot.mockImplementation((agentId: string, conversationId: string) => (
+      agentId === 'agent-1' && conversationId === 'conv-1' ? { runId: 'run-1', lastSequence: 0 } : null
+    ))
+    getRunStatus.mockResolvedValue({ status: 'completed' })
+
+    render()
+    await flush()
+
+    expect(getRunStatus).toHaveBeenCalledWith('agent-1', 'run-1')
+    expect(removeRunSnapshot).toHaveBeenCalledWith('agent-1', 'conv-1')
+  })
+
+  test('ignores stale polls after a newer poll reports an active replacement run', async () => {
+    let snapshot = { runId: 'old-run', lastSequence: 0 }
+    let resolveOldStatus!: (status: { status: string }) => void
+    getStoredRunSnapshot.mockImplementation((agentId: string, conversationId: string) => (
+      agentId === 'agent-1' && conversationId === 'conv-1' ? snapshot : null
+    ))
+    getRunStatus.mockImplementation((_agentId: string, runId: string) => {
+      if (runId === 'old-run') {
+        return new Promise((resolve) => { resolveOldStatus = resolve })
+      }
+      return Promise.resolve({ status: 'running' })
+    })
+
+    render()
+    await flush()
+    expect(getRunStatus).toHaveBeenCalledWith('agent-1', 'old-run')
+
+    snapshot = { runId: 'replacement-run', lastSequence: 0 }
+    await act(async () => {
+      intervalCallbacks.at(-1)!()
+      await Promise.resolve()
+    })
+    expect(getRunStatus).toHaveBeenCalledWith('agent-1', 'replacement-run')
+    expect(renderer!.root.findAllByType('i').filter((node) => node.props.className === 'h-4 w-4 shrink-0 animate-spin text-muted-foreground')).toHaveLength(1)
+
+    await act(async () => {
+      resolveOldStatus({ status: 'completed' })
+      await Promise.resolve()
+    })
+
+    expect(removeRunSnapshot).not.toHaveBeenCalled()
+    expect(renderer!.root.findAllByType('i').filter((node) => node.props.className === 'h-4 w-4 shrink-0 animate-spin text-muted-foreground')).toHaveLength(1)
+  })
   test('places pending ask_user above the composer and forwards final answers', async () => {
     const submitAskUser = mock(async () => undefined)
     chatState.messages = [{
@@ -437,7 +517,7 @@ describe('PublicChatPage', () => {
     await click('confirmDeleteConversation')
     expect(deleteConversation).toHaveBeenCalledWith('conv-2')
 
-    await act(async () => (chatOptions.onConversationChange?.()))
+    await act(async () => chatOptions.onConversationChange?.('conv-2'))
     expect(getConversations).toHaveBeenCalledWith('agent-1', { page: 1, pageSize: 5 })
     await act(async () => chatOptions.onStreamEnd?.())
     expect(getConversations).toHaveBeenCalledWith('agent-1', { page: 1, pageSize: 5 })

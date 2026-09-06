@@ -1732,3 +1732,31 @@ async def test_migrate_auto_notification_types_skips_absent_config(monkeypatch):
     await init_data.migrate_auto_notification_types()
 
     set_value.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_execute_ddl_uses_script_for_non_sqlite_connection() -> None:
+    conn = SimpleNamespace(
+        capabilities=SimpleNamespace(dialect="postgres"),
+        execute_script=AsyncMock(),
+        execute_query=AsyncMock(),
+    )
+
+    await init_data._execute_ddl(conn, "CREATE TABLE example")
+
+    conn.execute_script.assert_awaited_once_with("CREATE TABLE example")
+    conn.execute_query.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_execute_ddl_falls_back_to_query_for_sqlite_connection() -> None:
+    conn = SimpleNamespace(
+        capabilities=SimpleNamespace(dialect="sqlite"),
+        execute_script=AsyncMock(),
+        execute_query=AsyncMock(),
+    )
+
+    await init_data._execute_ddl(conn, "CREATE TABLE example")
+
+    conn.execute_script.assert_not_awaited()
+    conn.execute_query.assert_awaited_once_with("CREATE TABLE example")

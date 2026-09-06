@@ -13,11 +13,12 @@ import logging
 import re
 from collections.abc import Callable
 from typing import Any, TYPE_CHECKING, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jieba
 from tortoise import Tortoise
 from tortoise.backends.base.client import BaseDBAsyncClient
+from tortoise.transactions import in_transaction
 
 from app.core.config import settings
 from app.models.knowledge_base import (
@@ -96,6 +97,7 @@ async def _get_qdrant_client() -> Any:
         _qdrant_client = AsyncQdrantClient(
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY,
+            timeout=60.0,
         )
     return _qdrant_client
 
@@ -308,6 +310,36 @@ class DimensionMismatchError(Exception):
     """Raised when embedding dimension doesn't match knowledge base dimension."""
 
 
+def _validate_embeddings(
+    embeddings: list[list[float]],
+    expected_count: int,
+    expected_dimension: int | None = None,
+) -> int:
+    """Validate embedding cardinality and dimensions before persisting vectors."""
+    actual_count = len(embeddings)
+    if actual_count != expected_count:
+        raise ValueError(f"Expected {expected_count} embeddings, got {actual_count}")
+    if expected_count == 0:
+        return expected_dimension or 0
+
+    dimension = len(embeddings[0])
+    if dimension == 0:
+        raise ValueError("Embedding vectors must not be empty")
+    if expected_dimension is not None and dimension != expected_dimension:
+        raise ValueError(
+            f"Expected embedding dimension {expected_dimension}, got {dimension}"
+        )
+    for index, embedding in enumerate(embeddings):
+        if not embedding:
+            raise ValueError(f"Embedding at index {index} is empty")
+        if len(embedding) != dimension:
+            raise ValueError(
+                f"Embedding at index {index} has dimension {len(embedding)}, "
+                f"expected {dimension}"
+            )
+    return dimension
+
+
 async def _ensure_kb_dimension(kb_id: UUID, embedding_dim: int) -> int:
     """
     Ensure KB embedding dimension matches the embedding vector.
@@ -361,6 +393,11 @@ class VectorStore:
         self.team_id = team_id
         self.embedding_dimension = embedding_dimension
         self._detected_dimension: int | None = None
+
+    def _remember_detected_dimension(self, dimension: int) -> None:
+        """Remember a provider-derived dimension when none was configured."""
+        if self.embedding_dimension is None and self._detected_dimension is None:
+            self._detected_dimension = dimension
 
     async def _resolve_rerank_config(
         self,
@@ -482,10 +519,11 @@ class VectorStore:
             dimension: Embedding dimension (uses detected/configured dimension if not provided)
             payload: Optional payload (e.g., kb_id/document_id)
         """
-        dim = dimension or self.embedding_dimension or self._detected_dimension
-        if not dim:
-            dim = len(embedding)
-            self._detected_dimension = dim
+        expected_dimension = (
+            dimension or self.embedding_dimension or self._detected_dimension
+        )
+        dim = _validate_embeddings([embedding], 1, expected_dimension)
+        self._remember_detected_dimension(dim)
 
         collection = await _ensure_collection(dim)
         client = await _get_qdrant_client()
@@ -519,17 +557,14 @@ class VectorStore:
             dimension: Embedding dimension (uses detected/configured dimension if not provided)
             payloads: Optional list of payloads per vector
         """
-        if not chunk_ids or not embeddings:
+        if not chunk_ids:
             return
 
-        # Detect dimension from embeddings
-        dim = dimension or self.embedding_dimension or self._detected_dimension
-        if not dim and embeddings:
-            dim = len(embeddings[0])
-            self._detected_dimension = dim
-
-        if not dim:
-            raise ValueError("Cannot determine embedding dimension")
+        expected_dimension = (
+            dimension or self.embedding_dimension or self._detected_dimension
+        )
+        dim = _validate_embeddings(embeddings, len(chunk_ids), expected_dimension)
+        self._remember_detected_dimension(dim)
 
         collection = await _ensure_collection(dim)
         client = await _get_qdrant_client()
@@ -669,11 +704,12 @@ class VectorStore:
         # Generate embeddings for all chunks
         texts = [c["content"] for c in chunks]
         embeddings = await self.embed_texts(texts)
-
-        # Detect dimension
-        detected_dim = len(embeddings[0]) if embeddings else None
-        if detected_dim:
-            self._detected_dimension = detected_dim
+        detected_dim = _validate_embeddings(
+            embeddings,
+            len(chunks),
+            self.embedding_dimension or self._detected_dimension,
+        )
+        self._remember_detected_dimension(detected_dim)
 
         resolved_kb_id = kb_id or document.knowledge_base_id
 
@@ -728,86 +764,124 @@ class VectorStore:
         chunks: list[dict[str, Any]],
         kb_id: UUID | None = None,
         progress_callback: Callable[..., Any] | None = None,
+        batch_size: int = 25,
     ) -> list[DocumentChunk]:
-        """
-        Store document chunks with per-chunk embedding and progress reporting.
-
-        Unlike store_chunks which embeds all texts in one batch, this method
-        embeds and stores each chunk individually, calling progress_callback
-        after each one so the caller can update progress.
-
-        Args:
-            document: Parent document
-            chunks: List of chunk dicts with content, index, etc.
-            kb_id: Optional knowledge base ID for dimension management
-            progress_callback: async callable(embedded, failed, total) called after each chunk
-
-        Returns:
-            List of created DocumentChunk objects
-        """
+        """Persist all chunks first, then embed and store them in batches."""
         if not chunks:
             return []
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
 
         resolved_kb_id = kb_id or document.knowledge_base_id
-        created_chunks: list[DocumentChunk] = []
-        embedded_count = 0
-        failed_count = 0
-        total = len(chunks)
-
-        for chunk_data in chunks:
-            embedding_id = f"doc_{document.id}_chunk_{chunk_data['chunk_index']}"
-
-            chunk_obj = await DocumentChunk.create(
-                document=document,
+        chunk_objs = [
+            DocumentChunk(
+                id=uuid4(),
+                document_id=document.id,
                 content=chunk_data["content"],
                 chunk_index=chunk_data["chunk_index"],
                 token_count=chunk_data.get("token_count", 0),
                 metadata=chunk_data.get("metadata"),
-                embedding_id=embedding_id,
+                embedding_id=f"doc_{document.id}_chunk_{chunk_data['chunk_index']}",
                 status="pending",
             )
+            for chunk_data in chunks
+        ]
+        db = getattr(getattr(DocumentChunk, "_meta", None), "default_connection", None)
+        if db and Tortoise.is_inited():
+            async with in_transaction() as conn:
+                await DocumentChunk.bulk_create(chunk_objs, using_db=conn)
+        else:
+            await DocumentChunk.bulk_create(chunk_objs)
 
+        created_chunks: list[DocumentChunk] = []
+        embedded_count = 0
+        failed_count = 0
+        total = len(chunk_objs)
+
+        for start in range(0, total, batch_size):
+            batch_objs = chunk_objs[start : start + batch_size]
+            batch_data = chunks[start : start + batch_size]
             try:
-                # Embed single text
-                embeddings = await self.embed_texts([chunk_data["content"]])
-                embedding = embeddings[0]
-                detected_dim = len(embedding)
-
-                # Ensure KB dimension on first chunk
-                if embedded_count == 0 and isinstance(resolved_kb_id, UUID):
-                    self._detected_dimension = detected_dim
-                    await _ensure_kb_dimension(resolved_kb_id, detected_dim)
-
-                # Store in Qdrant
-                await self._store_embedding(
-                    chunk_obj.id,
-                    embedding,
-                    dimension=detected_dim,
-                    payload={
-                        "kb_id": str(resolved_kb_id) if resolved_kb_id else "",
-                        "document_id": str(document.id),
-                    },
+                embeddings = await self.embed_texts(
+                    [item["content"] for item in batch_data]
                 )
-
-                chunk_obj.status = "embedded"
-                chunk_obj.error_message = cast(Any, None)
-                await chunk_obj.save(update_fields=["status", "error_message"])
-                embedded_count += 1
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to embed chunk {chunk_obj.id} (index {chunk_data['chunk_index']}): {e}"
+                dimension = _validate_embeddings(
+                    embeddings,
+                    len(batch_objs),
+                    self.embedding_dimension or self._detected_dimension,
                 )
-                chunk_obj.status = "failed"
-                chunk_obj.error_message = "document_process_failed"
-                await chunk_obj.save(update_fields=["status", "error_message"])
-                failed_count += 1
-
-            created_chunks.append(chunk_obj)
-
+                if isinstance(resolved_kb_id, UUID):
+                    await _ensure_kb_dimension(resolved_kb_id, dimension)
+                self._remember_detected_dimension(dimension)
+                await self._batch_store_embeddings(
+                    [item.id for item in batch_objs],
+                    embeddings,
+                    dimension=dimension,
+                    payloads=[
+                        {
+                            "kb_id": str(resolved_kb_id) if resolved_kb_id else "",
+                            "document_id": str(document.id),
+                        }
+                        for _ in batch_objs
+                    ],
+                )
+                for item in batch_objs:
+                    item.status = "embedded"
+                    item.error_message = cast(Any, None)
+                await DocumentChunk.bulk_update(
+                    batch_objs, fields=["status", "error_message"]
+                )
+                embedded_count += len(batch_objs)
+                created_chunks.extend(batch_objs)
+            except Exception as batch_error:
+                logger.warning(
+                    "Batch embedding failed for document %s; falling back to per-chunk: %s",
+                    document.id,
+                    batch_error,
+                )
+                for item, chunk_data in zip(batch_objs, batch_data):
+                    try:
+                        embeddings = await self.embed_texts([chunk_data["content"]])
+                        dimension = _validate_embeddings(
+                            embeddings,
+                            1,
+                            self.embedding_dimension or self._detected_dimension,
+                        )
+                        if isinstance(resolved_kb_id, UUID):
+                            await _ensure_kb_dimension(resolved_kb_id, dimension)
+                        self._remember_detected_dimension(dimension)
+                        await self._store_embedding(
+                            item.id,
+                            embeddings[0],
+                            dimension=dimension,
+                            payload={
+                                "kb_id": str(resolved_kb_id) if resolved_kb_id else "",
+                                "document_id": str(document.id),
+                            },
+                        )
+                        item.status = "embedded"
+                        item.error_message = cast(Any, None)
+                        await item.save(update_fields=["status", "error_message"])
+                        embedded_count += 1
+                    except Exception as error:
+                        logger.error(
+                            "Failed to embed chunk %s (index %s): %s",
+                            item.id,
+                            chunk_data["chunk_index"],
+                            error,
+                        )
+                        item.status = "failed"
+                        item.error_message = "document_process_failed"
+                        metadata = dict(getattr(item, "metadata", None) or {})
+                        metadata["error_detail"] = str(error)[:500]
+                        item.metadata = metadata
+                        await item.save(
+                            update_fields=["status", "error_message", "metadata"]
+                        )
+                        failed_count += 1
+                    created_chunks.append(item)
             if progress_callback:
                 await progress_callback(embedded_count, failed_count, total)
-
         return created_chunks
 
     async def search(
@@ -1477,7 +1551,13 @@ class VectorStore:
         """
         # Generate embedding
         embeddings = await self.embed_texts([chunk.content])
+        _validate_embeddings(
+            embeddings,
+            1,
+            self.embedding_dimension or self._detected_dimension,
+        )
         embedding = embeddings[0]
+        self._remember_detected_dimension(len(embedding))
         await _ensure_kb_dimension(kb_id, len(embedding))
 
         # Store embedding reference
@@ -1497,6 +1577,49 @@ class VectorStore:
 
         logger.info(f"Added vector for chunk {chunk.id}")
         return True
+
+    async def add_chunk_vectors_batch(
+        self,
+        kb_id: UUID,
+        chunks: list[DocumentChunk],
+        *,
+        using_db: BaseDBAsyncClient | None = None,
+    ) -> list[DocumentChunk]:
+        """Add vector embeddings for multiple chunks in batch."""
+        if not chunks:
+            return []
+        texts = [c.content for c in chunks]
+        embeddings = await self.embed_texts(texts)
+        dim = _validate_embeddings(
+            embeddings,
+            len(chunks),
+            self.embedding_dimension or self._detected_dimension,
+        )
+        self._remember_detected_dimension(dim)
+        await _ensure_kb_dimension(kb_id, dim)
+
+        chunk_ids = [c.id for c in chunks]
+        payloads = [
+            {
+                "kb_id": str(kb_id),
+                "document_id": str(c.document_id),
+            }
+            for c in chunks
+        ]
+        await self._batch_store_embeddings(
+            chunk_ids, embeddings, dimension=dim, payloads=payloads
+        )
+
+        for chunk in chunks:
+            chunk.embedding_id = f"kb_{kb_id}_chunk_{chunk.id}"
+            chunk.status = "embedded"
+            chunk.error_message = cast(Any, None)
+        await DocumentChunk.bulk_update(
+            chunks,
+            fields=["embedding_id", "status", "error_message"],
+            using_db=using_db,
+        )
+        return chunks
 
     async def delete_kb_vectors(self, kb_id: UUID) -> int:
         """

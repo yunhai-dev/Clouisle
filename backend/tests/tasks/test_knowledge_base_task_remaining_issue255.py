@@ -56,6 +56,21 @@ def document():
     )
 
 
+def test_get_chunk_error_uses_provider_detail_for_internal_sentinel(
+    monkeypatch, document
+):
+    chunk = SimpleNamespace(
+        error_message="document_process_failed",
+        metadata={"error_detail": "provider rejected the request"},
+    )
+    monkeypatch.setattr(knowledge_base, "t", lambda key, **_kwargs: key)
+
+    assert (
+        knowledge_base._get_chunk_error(document, chunk)
+        == "provider rejected the request"
+    )
+
+
 def test_process_document_all_failed_records_progress_and_error(monkeypatch, document):
     chunks = [
         SimpleNamespace(status="failed", token_count=2),
@@ -64,7 +79,7 @@ def test_process_document_all_failed_records_progress_and_error(monkeypatch, doc
 
     class Store:
         async def store_chunks_with_progress(
-            self, _document, _chunks, *, kb_id, progress_callback
+            self, _document, _chunks, *, kb_id, progress_callback, **_kwargs
         ):
             assert kb_id == document.knowledge_base.id
             await progress_callback(0, 2, 2)
@@ -201,3 +216,16 @@ def test_get_worker_loop_replaces_closed_policy_loop(monkeypatch):
 
     assert knowledge_base._get_worker_loop() is new_loop
     set_event_loop.assert_called_once_with(new_loop)
+
+
+def test_get_chunk_error_preserves_non_sentinel_message(monkeypatch, document):
+    chunk = SimpleNamespace(
+        error_message="provider rejected the request",
+        metadata={"error_detail": "less specific detail"},
+    )
+    monkeypatch.setattr(knowledge_base, "t", lambda key, **_kwargs: key)
+
+    assert (
+        knowledge_base._get_chunk_error(document, chunk)
+        == "provider rejected the request"
+    )

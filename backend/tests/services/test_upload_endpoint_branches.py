@@ -106,6 +106,30 @@ async def test_upload_file_infers_type_saves_and_audits():
 
 
 @pytest.mark.anyio
+async def test_upload_file_accepts_legacy_excel_mime_type():
+    storage = SimpleNamespace(save=AsyncMock(return_value="uploads/docs/report.xls"))
+    audit = AsyncMock()
+    register = AsyncMock(return_value=SimpleNamespace(id="asset-xls"))
+    file = _file(
+        content=b"excel", filename="report.xls", content_type="application/vnd.ms-excel"
+    )
+    user = SimpleNamespace(id="user-1")
+
+    with (
+        patch.object(upload, "_upload_storage", AsyncMock(return_value=storage)),
+        patch.object(upload.AuditLogService, "log", audit),
+        patch.object(upload.asset_service, "register_bytes", register),
+    ):
+        result = await upload.upload_file(SimpleNamespace(), file, "docs", user)
+
+    assert result["data"]["content_type"] == "application/vnd.ms-excel"
+    assert storage.save.await_args.kwargs == {
+        "content_type": "application/vnd.ms-excel"
+    }
+    audit.assert_awaited_once()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("exists", [False, True])
 async def test_get_file_handles_missing_and_download(exists: bool):
     response = SimpleNamespace(media_type="text/plain")

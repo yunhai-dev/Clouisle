@@ -371,6 +371,9 @@ describe('useChat', () => {
         streamRun,
         getRunStatus,
       } as unknown as NonNullable<HookOptions['api']>
+      const pendingInput = {
+        questions: [{ id: 'target', question: 'Where?', options: ['cloud'], required: true }],
+      }
       getRunStatus.mockResolvedValue({
         id: 'run-1',
         agent_id: 'agent-1',
@@ -378,7 +381,10 @@ describe('useChat', () => {
         mode: 'send',
         status: 'waiting',
         pending_tool_call_id: 'call-ask',
+        pending_tool_name: 'ask_user',
+        pending_tool_input: pendingInput,
       })
+
       storage.set(
         'clouisle:agent-run:agent-1:conversation-1',
         JSON.stringify({ runId: 'run-1', lastSequence: 4 }),
@@ -395,11 +401,178 @@ describe('useChat', () => {
       expect(streamRun).toHaveBeenCalledWith('agent-1', 'run-1', 4)
       expect(result.runStatus).toBe('waiting')
       expect(result.pendingAskUserToolCallId).toBe('call-ask')
+      renderHookHarness()
+      const assistant = result.messages.find((message) => message.role === 'assistant')
+      expect(assistant).toMatchObject({
+        id: 'assistant-run-run-1',
+        metadata: { isLoading: true },
+      })
+      expect(assistant?.parts).toContainEqual({
+        type: 'tool-call',
+        toolCallId: 'call-ask',
+        toolName: 'ask_user',
+        toolDisplayName: 'ask_user',
+        input: pendingInput,
+        state: 'pending',
+      })
     } finally {
       Object.defineProperty(globalThis, 'window', {
         configurable: true,
         value: originalWindow,
       })
+    }
+  })
+  it('ignores a stale run-status response after switching conversations', async () => {
+    const storage = new Map<string, string>([
+      ['clouisle:agent-run:agent-1:conversation-a', JSON.stringify({ runId: 'run-a', lastSequence: 2 })],
+      ['clouisle:agent-run:agent-1:conversation-b', JSON.stringify({ runId: 'run-b', lastSequence: 5 })],
+    ])
+    const originalWindow = globalThis.window
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        sessionStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => storage.set(key, value),
+          removeItem: (key: string) => storage.delete(key),
+        },
+      },
+    })
+    try {
+      const statusA = deferred<{ status: 'completed' }>()
+      const statusB = deferred<{
+        status: 'waiting'
+        pending_tool_call_id: string
+        pending_tool_name: string
+        pending_tool_input: Record<string, unknown>
+      }>()
+      getRunStatus.mockImplementation((_agentId: string, runId: string) => (
+        runId === 'run-a' ? statusA.promise : statusB.promise
+      ))
+      const streamRun = mock(() => ({ stream: new Promise<Response>(() => undefined), abort: mock() }))
+      const durableApi = { ...agentsApi, streamRun, getRunStatus } as unknown as NonNullable<HookOptions['api']>
+      options = { agentId: 'agent-1', conversationId: 'conversation-a', api: durableApi }
+      renderHookHarness()
+      result.setConversationId('conversation-a')
+      await flush()
+      result.reconnect()
+      await flush()
+      result.setConversationId('conversation-b')
+      result.reconnect()
+      await flush()
+      expect(getRunStatus).toHaveBeenNthCalledWith(1, 'agent-1', 'run-a')
+      expect(getRunStatus).toHaveBeenNthCalledWith(2, 'agent-1', 'run-b')
+
+      statusB.resolve({
+        status: 'waiting',
+        pending_tool_call_id: 'call-b',
+        pending_tool_name: 'ask_user',
+        pending_tool_input: { questions: [{ id: 'target', question: 'Where?' }] },
+      })
+      for (let i = 0; i < 8; i += 1) await flush()
+      expect(result.conversationId).toBe('conversation-b')
+      expect(result.runId).toBe('run-b')
+      expect(result.runStatus).toBe('waiting')
+      expect(result.pendingAskUserToolCallId).toBe('call-b')
+
+      statusA.resolve({ status: 'completed' })
+      for (let i = 0; i < 8; i += 1) await flush()
+      expect(result.conversationId).toBe('conversation-b')
+      expect(result.runId).toBe('run-b')
+      expect(result.runStatus).toBe('waiting')
+      expect(result.pendingAskUserToolCallId).toBe('call-b')
+      expect(getConversation).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      })
+    }
+  })
+
+  it('persists the durable run snapshot before the first stream event', async () => {
+    const storage = new Map<string, string>()
+    const originalWindow = globalThis.window
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        sessionStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => storage.set(key, value),
+          removeItem: (key: string) => storage.delete(key),
+        },
+      },
+    })
+    try {
+      const stream = deferred<Response>()
+      const startRun = mock(async () => ({
+        run_id: 'run-1',
+        conversation_id: 'conversation-1',
+
+        user_message_id: 'user-1',
+        status: 'queued' as const,
+        stream_url: '/agents/agent-1/chat/runs/run-1/stream',
+      }))
+      const streamRun = mock(() => ({ stream: stream.promise, abort: mock() }))
+      const durableApi = { ...agentsApi, startRun, streamRun } as unknown as NonNullable<HookOptions['api']>
+      options = { agentId: 'agent-1', api: durableApi }
+      renderHookHarness()
+
+      const sending = result.sendMessage('hello')
+      for (let i = 0; i < 5; i += 1) await flush()
+
+      expect(storage.get('clouisle:agent-run:agent-1:conversation-1')).toBe(
+        JSON.stringify({ runId: 'run-1', lastSequence: 0 }),
+      )
+      void sending
+    } finally {
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow })
+    }
+  })
+  it('reloads authoritative history when refresh finds a terminal run', async () => {
+    const storage = new Map<string, string>([
+      ['clouisle:agent-run:agent-1:conversation-1', JSON.stringify({ runId: 'run-1', lastSequence: 4 })],
+    ])
+    const originalWindow = globalThis.window
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        sessionStorage: {
+          getItem: (key: string) => storage.get(key) ?? null,
+          setItem: (key: string, value: string) => storage.set(key, value),
+          removeItem: (key: string) => storage.delete(key),
+        },
+      },
+    })
+    try {
+      const finalMessages = [{
+        id: 'assistant-final',
+        role: 'assistant' as const,
+        parts: [{ type: 'text' as const, text: 'done' }],
+      }]
+      getRunStatus.mockResolvedValue({
+        id: 'run-1',
+        agent_id: 'agent-1',
+        conversation_id: 'conversation-1',
+        mode: 'send',
+        status: 'completed',
+      })
+      getConversation.mockResolvedValue({ messages: finalMessages })
+      const durableApi = { ...agentsApi, getRunStatus, getConversation } as unknown as NonNullable<HookOptions['api']>
+      options = { agentId: 'agent-1', conversationId: 'conversation-1', api: durableApi }
+      renderHookHarness()
+
+      result.setConversationId('conversation-1')
+      await flush()
+      result.reconnect()
+      for (let i = 0; i < 5; i += 1) await flush()
+      renderHookHarness()
+
+      expect(getConversation).toHaveBeenCalledWith('conversation-1')
+      expect(result.messages).toEqual(finalMessages)
+      expect(storage.has('clouisle:agent-run:agent-1:conversation-1')).toBe(false)
+    } finally {
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow })
     }
   })
 
@@ -1341,5 +1514,51 @@ describe('useChat', () => {
     expect(result.runStatus).toBe('stopped')
     expect(result.status).toBe('idle')
     expect(result.messages.find((message) => message.id === 'assistant-1')?.parts).toContainEqual({ type: 'stopped' })
+  })
+  it('finalizes a durable stop immediately when the API reports stopped', async () => {
+    const release = deferred<StreamEvent>()
+    const abort = mock()
+    const onStreamEnd = mock()
+    const runEvent = (sequence: number, type: string, payload: Record<string, unknown>) => ({
+      event: type,
+      data: { run_id: 'run-1', sequence, timestamp: '2026-08-31T00:00:00Z', type, payload },
+    })
+    const startRun = mock(async () => ({
+      run_id: 'run-1',
+      conversation_id: 'conversation-1',
+      user_message_id: 'user-1',
+      status: 'queued' as const,
+      stream_url: '/agents/agent-1/chat/runs/run-1/stream',
+    }))
+    const streamRun = mock(() => ({ stream: Promise.resolve(new Response()), abort }))
+    const durableApi = { ...agentsApi, startRun, streamRun } as unknown as NonNullable<HookOptions['api']>
+    options = { agentId: 'agent-1', api: durableApi, onStreamEnd }
+    renderHookHarness()
+    stopRun.mockResolvedValue({ status: 'stopped' })
+    streamEvents = [
+      runEvent(1, 'run_start', { status: 'running', run_id: 'run-1' }),
+      runEvent(2, 'message_start', { conversation_id: 'conversation-1', message_id: 'assistant-1' }),
+      runEvent(3, 'content_delta', { delta: 'partial' }),
+      release.promise,
+    ]
+
+    const sending = result.sendMessage('question')
+    for (let i = 0; i < 8; i += 1) await flush()
+    const stopping = result.stop()
+    await stopping
+
+    expect(stopRun).toHaveBeenCalledWith('agent-1', 'run-1')
+    expect(abort).toHaveBeenCalledTimes(1)
+    expect(result.runStatus).toBe('stopped')
+    expect(result.status).toBe('idle')
+    expect(onStreamEnd).toHaveBeenCalledTimes(1)
+    expect(result.messages.find((message) => message.id === 'assistant-1')?.parts).toContainEqual({ type: 'stopped' })
+
+    release.resolve({ event: 'content_delta', data: { delta: 'late' } })
+    await sending
+    expect(result.messages.find((message) => message.id === 'assistant-1')?.parts).not.toContainEqual({
+      type: 'text',
+      text: 'late',
+    })
   })
 })

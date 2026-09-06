@@ -221,6 +221,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const subscriptionAbortRef = useRef<(() => void) | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
   const connectionEpochRef = useRef(0)
+  const reconnectGenerationRef = useRef(0)
+  const subscriptionGenerationRef = useRef(0)
   const previousConversationRef = useRef<string | null>(conversationId)
   const activeRunConversationRef = useRef<string | null>(conversationId)
   const activeSessionRef = useRef<AssistantStreamSession | null>(null)
@@ -228,7 +230,6 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const pendingRunInputsRef = useRef<PendingRunInput[]>([])
   const flushPendingInputsRef = useRef<(runId: string) => void>(() => undefined)
   const terminalRunsRef = useRef(new Set<string>())
-  const terminalWaitersRef = useRef(new Map<string, Set<() => void>>())
   const runStartWaiterRef = useRef<RunStartWaiter | null>(null)
 
   const streamingStateRef = useRef<StreamingState>(emptyStreamingState())
@@ -256,20 +257,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     setPendingAskUserToolCallIdState(next)
   }, [])
 
-  const waitForRunEnd = useCallback((targetRunId: string) => {
-    if (terminalRunsRef.current.has(targetRunId)) return Promise.resolve()
-    return new Promise<void>((resolve) => {
-      const waiters = terminalWaitersRef.current.get(targetRunId) ?? new Set<() => void>()
-      waiters.add(resolve)
-      terminalWaitersRef.current.set(targetRunId, waiters)
-    })
-  }, [])
 
   const resolveRunEnd = useCallback((targetRunId: string) => {
     terminalRunsRef.current.add(targetRunId)
-    const waiters = terminalWaitersRef.current.get(targetRunId)
-    terminalWaitersRef.current.delete(targetRunId)
-    waiters?.forEach((resolve) => resolve())
   }, [])
   const resolveRunStart = useCallback((session: AssistantStreamSession, nextRunId: string) => {
     const waiter = runStartWaiterRef.current
@@ -417,24 +407,35 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       endNotified: false,
       runId: runIdForSession,
     }
-    setMessages((previous) => previous.some((message) => message.id === messageId)
-      ? previous
-      : [...previous, {
+    setMessages((previous) => {
+      if (!previous.some((message) => message.id === messageId)) {
+        return [...previous, {
           id: messageId,
           role: 'assistant',
           parts: [],
           createdAt: new Date(),
           metadata: { isLoading: true, isManuallyStopped: false },
-        }])
+        }]
+      }
+      return previous.map((message) => (
+        message.id === messageId
+          ? { ...message, metadata: { ...message.metadata, isLoading: true, isManuallyStopped: false } }
+          : message
+      ))
+    })
     activeSessionRef.current = session
     if (runIdForSession) sessionsByRunRef.current.set(runIdForSession, session)
     syncStreamingState(session)
     return session
   }, [syncStreamingState])
 
-  const reloadConversationMessages = useCallback(async (targetConversationId = conversationIdRef.current) => {
+  const reloadConversationMessages = useCallback(async (
+    targetConversationId = conversationIdRef.current,
+    isCurrent?: () => boolean,
+  ) => {
     if (!targetConversationId) return
     const { messages: convertedMessages } = await api.getConversation(targetConversationId)
+    if (isCurrent && !isCurrent()) return
     const currentById = new Map(messagesRef.current.map((message) => [message.id, message]))
     setMessages(convertedMessages.map((message) => {
       const previous = currentById.get(message.id)
@@ -814,6 +815,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         resolveRunEnd(terminalRunId)
         clearStoredRunSnapshot()
         sessionsByRunRef.current.delete(terminalRunId)
+        if (activeSessionRef.current === terminalSession) activeSessionRef.current = null
       }
       setPendingAskUserToolCallId(null)
       setCurrentStatus('idle')
@@ -864,14 +866,20 @@ export function useChat(options: UseChatOptions): UseChatReturn {
 
   const startSubscription = useCallback((targetRunId: string) => {
     subscriptionAbortRef.current?.()
+    const subscriptionGeneration = ++subscriptionGenerationRef.current
     let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let timer: NodeJS.Timeout | number | null = null
     let streamAbort: (() => void) | null = null
+    const isCurrentSubscription = () => (
+      !cancelled
+      && subscriptionGenerationRef.current === subscriptionGeneration
+      && runIdRef.current === targetRunId
+    )
     const scheduleRetry = () => {
-      if (cancelled || runIdRef.current !== targetRunId || !isReconnectableRunStatus(runStatusRef.current)) return
+      if (!isCurrentSubscription() || !isReconnectableRunStatus(runStatusRef.current)) return
       timer = globalThis.setTimeout(() => {
         timer = null
-        startSubscription(targetRunId)
+        if (isCurrentSubscription()) startSubscription(targetRunId)
       }, 1000)
     }
     subscriptionAbortRef.current = () => {
@@ -889,9 +897,10 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         const consumeSubscription = async () => {
           try {
             const response = await source.stream
+            if (!isCurrentSubscription()) return
             if (!response.ok) throw new Error(`Run stream failed (${response.status})`)
             for await (const event of parseSSEStream(response)) {
-              if (cancelled || runIdRef.current !== targetRunId) return
+              if (!isCurrentSubscription()) return
               applyIncomingEvent(event)
             }
             scheduleRetry()
@@ -907,73 +916,139 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     }
 
     const poll = async () => {
-      if (cancelled || runIdRef.current !== targetRunId || !runApi.getRunEvents) return
+      if (!isCurrentSubscription() || !runApi.getRunEvents) return
       try {
         const events = await runApi.getRunEvents(agentId, targetRunId, lastSequenceRef.current)
-        if (cancelled || runIdRef.current !== targetRunId) return
+        if (!isCurrentSubscription()) return
         for (const event of events) {
+          if (!isCurrentSubscription()) return
           applyIncomingEvent({ event: event.type, data: event })
         }
       } catch {
         // Keep the durable run alive. The next focus or polling turn retries the replay endpoint.
       }
-      if (cancelled || runIdRef.current !== targetRunId || !isReconnectableRunStatus(runStatusRef.current)) return
-      timer = globalThis.setTimeout(() => { void poll() }, 1000)
+      if (!isCurrentSubscription() || !isReconnectableRunStatus(runStatusRef.current)) return
+      timer = globalThis.setTimeout(() => {
+        timer = null
+        if (isCurrentSubscription()) void poll()
+      }, 1000)
     }
 
     void poll()
   }, [agentId, applyIncomingEvent, runApi])
 
-  const reconnectToRun = useCallback(async (targetConversationId = conversationIdRef.current) => {
-    if (!agentId || !targetConversationId || !runApi.getRunStatus) return
-    const currentRunId = activeRunConversationRef.current === targetConversationId
-      ? runIdRef.current
-      : null
-    const stored = currentRunId
-      ? { runId: currentRunId, lastSequence: lastSequenceRef.current }
-      : loadRunSnapshot(agentId, targetConversationId)
-    if (!stored) return
-
-    trackRun(stored.runId, targetConversationId)
-    lastSequenceRef.current = stored.lastSequence
-    try {
-      const current = await runApi.getRunStatus(agentId, stored.runId)
-      setCurrentRunStatus(current.status)
-      if (!isReconnectableRunStatus(current.status)) {
-        clearStoredRunSnapshot(targetConversationId)
-        if (runIdRef.current === stored.runId) {
-          runIdRef.current = null
-          setRunId(null)
-        }
-        setPendingAskUserToolCallId(null)
-        setCurrentStatus('idle')
-        return
-      }
-      if (current.status === 'waiting') {
-        setPendingAskUserToolCallId(current.pending_tool_call_id ?? null)
-        setCurrentStatus('idle')
-      } else {
-        setPendingAskUserToolCallId(null)
-        setCurrentStatus('streaming')
-      }
-      startSubscription(stored.runId)
-    } catch {
-      // A transient status failure must not stop a server-owned run.
-    }
-  }, [agentId, clearStoredRunSnapshot, runApi, setCurrentRunStatus, setCurrentStatus, setPendingAskUserToolCallId, startSubscription, trackRun])
-
-  const reconnect = useCallback(() => {
-    void reconnectToRun()
-  }, [reconnectToRun])
-
   const disconnectLocalSubscription = useCallback(() => {
     connectionEpochRef.current += 1
+    reconnectGenerationRef.current += 1
+    subscriptionGenerationRef.current += 1
     subscriptionAbortRef.current?.()
     subscriptionAbortRef.current = null
     abortRef.current?.()
     abortRef.current = null
     cancelScheduledStreamingFlush()
   }, [cancelScheduledStreamingFlush])
+
+  const reconnectToRun = useCallback(async (targetConversationId = conversationIdRef.current) => {
+    const generation = ++reconnectGenerationRef.current
+    if (!agentId || !targetConversationId || !runApi.getRunStatus) return
+    const currentRunId = activeRunConversationRef.current === targetConversationId
+      ? runIdRef.current
+      : null
+    const stored = currentRunId
+      ? { runId: currentRunId, lastSequence: lastSequenceRef.current }
+      : getStoredRunSnapshot(agentId, targetConversationId)
+    if (!stored) return
+
+    // If a live session is already active and streaming for this exact run,
+    // don't create a duplicate placeholder.  This happens when the
+    // startRun-triggered setConversationId fires the conversationId effect
+    // before any SSE events have populated sessionsByRunRef.  We intentionally
+    // check only activeSessionRef here (not sessionsByRunRef) so that a
+    // legitimate switch-back to this conversation still reconnects after the
+    // session was cleared during the outward switch.
+    if (activeSessionRef.current?.runId === stored.runId) return
+
+    trackRun(stored.runId, targetConversationId)
+    lastSequenceRef.current = stored.lastSequence
+    const isCurrentReconnect = () => (
+      reconnectGenerationRef.current === generation
+      && conversationIdRef.current === targetConversationId
+      && activeRunConversationRef.current === targetConversationId
+      && runIdRef.current === stored.runId
+    )
+
+    // Optimistically mark the UI as loading while we await the authoritative
+    // status so that switching to a conversation with a live background run
+    // gives instant visual feedback (spinner) instead of a blank flash.
+    if (statusRef.current === 'idle') setCurrentStatus('streaming')
+    try {
+      const current = await runApi.getRunStatus(agentId, stored.runId)
+      if (!isCurrentReconnect()) return
+      setCurrentRunStatus(current.status)
+      if (!isReconnectableRunStatus(current.status)) {
+        try {
+          await reloadConversationMessages(targetConversationId, isCurrentReconnect)
+        } catch {
+          if (!isCurrentReconnect()) return
+        }
+        if (!isCurrentReconnect()) return
+        disconnectLocalSubscription()
+        if (activeSessionRef.current?.runId === stored.runId) activeSessionRef.current = null
+        sessionsByRunRef.current.delete(stored.runId)
+        clearStoredRunSnapshot(targetConversationId)
+        runIdRef.current = null
+        setRunId(null)
+        setPendingAskUserToolCallId(null)
+        setCurrentStatus('idle')
+        return
+      }
+
+      if (!isCurrentReconnect()) return
+      const session = ensureSession(
+        current.canonical_message_id ?? `assistant-run-${stored.runId}`,
+        stored.runId
+      )
+      if (!session || !isCurrentReconnect()) return
+
+      if (current.status === 'waiting') {
+        if (hydratePendingAskUserSegment(session.state, current)) {
+          syncStreamingState(session)
+          renderSession(session, true)
+        }
+        setPendingAskUserToolCallId(current.pending_tool_call_id ?? null)
+        setCurrentStatus('idle')
+      } else {
+        setPendingAskUserToolCallId(null)
+        setCurrentStatus('streaming')
+      }
+      if (isCurrentReconnect()) startSubscription(stored.runId)
+    } catch {
+      if (!isCurrentReconnect()) return
+      // Keep the snapshot for a later focus/reconnect, but do not leave a
+      // current conversation showing a permanent spinner after a failed read.
+      setCurrentRunStatus(null)
+      setPendingAskUserToolCallId(null)
+      setCurrentStatus('idle')
+    }
+  }, [
+    agentId,
+    clearStoredRunSnapshot,
+    disconnectLocalSubscription,
+    ensureSession,
+    reloadConversationMessages,
+    renderSession,
+    runApi,
+    setCurrentRunStatus,
+    setCurrentStatus,
+    setPendingAskUserToolCallId,
+    startSubscription,
+    syncStreamingState,
+    trackRun,
+  ])
+
+  const reconnect = useCallback(() => {
+    void reconnectToRun()
+  }, [reconnectToRun])
 
   useEffect(() => {
     const previousConversationId = previousConversationRef.current
@@ -1205,6 +1280,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
           session.runId = started.run_id
           reconcileOptimisticUserMessage(session, started.user_message_id)
           trackRun(started.run_id, started.conversation_id)
+          storeRunSnapshot(started.conversation_id)
           setCurrentRunStatus(started.status)
           if (started.conversation_id && conversationIdRef.current !== started.conversation_id) {
             setConversationId(started.conversation_id)
@@ -1225,11 +1301,19 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     } else {
       await consumeStream(session, () => api.chatStream(agentId, request))
     }
-  }, [agentId, api, consumeStream, onConversationChange, reconcileOptimisticUserMessage, setConversationId, setCurrentRunStatus, setCurrentStatus, setPendingAskUserToolCallId, submitRunInput, syncStreamingState, trackRun, variables])
+  }, [agentId, api, consumeStream, onConversationChange, reconcileOptimisticUserMessage, setConversationId, setCurrentRunStatus, setCurrentStatus, setPendingAskUserToolCallId, storeRunSnapshot, submitRunInput, syncStreamingState, trackRun, variables])
 
   const stop = useCallback(async () => {
     let activeRunId = runIdRef.current ?? activeSessionRef.current?.runId ?? null
     const session = activeSessionRef.current
+    const stopConversationId = activeRunConversationRef.current ?? conversationIdRef.current
+    const previousRunStatus = runStatusRef.current
+    const previousUiStatus = statusRef.current
+    const isCurrentStop = () => (
+      (!stopConversationId || conversationIdRef.current === stopConversationId)
+      && (!session || activeSessionRef.current === session)
+      && runIdRef.current === activeRunId
+    )
     if (
       !activeRunId
       && session
@@ -1256,16 +1340,40 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     if (activeRunId && runApi.stopRun && (
       isReconnectableRunStatus(runStatusRef.current) || statusRef.current === 'loading' || statusRef.current === 'streaming'
     )) {
+      if (!isCurrentStop()) return
       setCurrentRunStatus('stopping')
-      const terminal = waitForRunEnd(activeRunId)
       try {
         const result = await runApi.stopRun(agentId, activeRunId)
-        if (runIdRef.current === activeRunId && result?.status) {
-          setCurrentRunStatus(result.status)
+        if (!isCurrentStop()) return
+        if (result?.status) setCurrentRunStatus(result.status)
+        if (result?.status === 'stopped') {
+          // Invalidate both the durable subscription and the request stream
+          // before marking the local session terminal. Late events must not
+          // repaint a stopped assistant message.
+          disconnectLocalSubscription()
+          resolveRunEnd(activeRunId)
+          if (session) {
+            markAssistantStopped(session)
+            notifyStreamEnd(session)
+          }
+          clearStoredRunSnapshot(stopConversationId)
+          sessionsByRunRef.current.delete(activeRunId)
+          setPendingAskUserToolCallId(null)
+          setCurrentStatus('idle')
+          if (runIdRef.current === activeRunId) {
+            runIdRef.current = null
+            setRunId(null)
+          }
+          resetStreamingState()
+          return
         }
-        startSubscription(activeRunId)
-        await terminal
+        if (!isCurrentStop()) return
       } catch (reason) {
+        if (!isCurrentStop()) return
+        if (runStatusRef.current === 'stopping') setCurrentRunStatus(previousRunStatus)
+        if (statusRef.current === 'loading' || statusRef.current === 'streaming') {
+          setCurrentStatus(previousUiStatus)
+        }
         const chatError: ChatError = { message: reason instanceof Error ? reason.message : '' }
         setError(chatError)
         onError?.(chatError)
@@ -1273,9 +1381,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       return
     }
 
-    connectionEpochRef.current += 1
-    abortRef.current?.()
-    abortRef.current = null
+    disconnectLocalSubscription()
     if (runStartWaiterRef.current) {
       runStartWaiterRef.current.reject(new Error('Run stopped before it started'))
       runStartWaiterRef.current = null
@@ -1286,7 +1392,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     }
     setCurrentStatus('idle')
     resetStreamingState()
-  }, [agentId, markAssistantStopped, notifyStreamEnd, onError, resetStreamingState, runApi, setCurrentRunStatus, setCurrentStatus, startSubscription, waitForRunEnd])
+  }, [agentId, clearStoredRunSnapshot, disconnectLocalSubscription, markAssistantStopped, notifyStreamEnd, onError, resetStreamingState, resolveRunEnd, runApi, setCurrentRunStatus, setCurrentStatus, setPendingAskUserToolCallId])
 
   const reset = useCallback(() => {
     disconnectLocalSubscription()
@@ -1635,7 +1741,7 @@ function runStorageKey(agentId: string, conversationId: string): string {
   return `${RUN_STORAGE_PREFIX}${encodeURIComponent(agentId)}:${encodeURIComponent(conversationId)}`
 }
 
-function loadRunSnapshot(agentId: string, conversationId: string): StoredRunSnapshot | null {
+export function getStoredRunSnapshot(agentId: string, conversationId: string): StoredRunSnapshot | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.sessionStorage.getItem(runStorageKey(agentId, conversationId))
@@ -1657,7 +1763,7 @@ function saveRunSnapshot(agentId: string, conversationId: string, snapshot: Stor
   }
 }
 
-function removeRunSnapshot(agentId: string, conversationId: string) {
+export function removeRunSnapshot(agentId: string, conversationId: string) {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.removeItem(runStorageKey(agentId, conversationId))
@@ -1879,6 +1985,34 @@ function markSegmentAskUserPending(
   }
   segment.toolCall = { ...segment.toolCall, state: 'pending' }
   return true
+}
+
+function hydratePendingAskUserSegment(
+  state: AssistantStreamState,
+  runStatus: AgentRunStatusOut,
+): boolean {
+  const toolCallId = runStatus.pending_tool_call_id
+  if (!toolCallId) return false
+
+  const toolName = runStatus.pending_tool_name ?? 'ask_user'
+  if (toolName !== 'ask_user') return false
+
+  if (!findToolSegment(state.segments, toolCallId)) {
+    state.segments.push({
+      type: 'tool',
+      toolCall: {
+        type: 'tool-call',
+        toolCallId,
+        toolName,
+        toolDisplayName: toolName,
+        input: runStatus.pending_tool_input ?? {},
+        state: 'pending',
+      },
+    })
+  }
+
+  state.taskState.toolCalling = 'running'
+  return markSegmentAskUserPending(state, toolCallId)
 }
 
 function mergeMcpToolCall(existing: McpToolCallPart, incoming: McpToolCallPart): McpToolCallPart {

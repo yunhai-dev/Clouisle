@@ -19,10 +19,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from tortoise.transactions import in_transaction
+
 from app.core.redis import get_redis
 from app.core.timezone import now_utc
 from app.models.agent_run import (
@@ -77,6 +79,90 @@ async def get_run(run_id: UUID) -> AgentRun | None:
     return await AgentRun.get_or_none(id=run_id)
 
 
+def _transition_updates(
+    run: AgentRun,
+    status: AgentRunStatus,
+    *,
+    updated_at: datetime,
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> dict[str, Any]:
+    updates: dict[str, Any] = {
+        "status": status,
+        "updated_at": updated_at,
+    }
+    if status == AgentRunStatus.RUNNING and run.started_at is None:
+        updates["started_at"] = updated_at
+    if status in (
+        AgentRunStatus.COMPLETED,
+        AgentRunStatus.STOPPED,
+        AgentRunStatus.FAILED,
+        AgentRunStatus.INTERRUPTED,
+    ):
+        updates["finished_at"] = updated_at
+    if error_code is not None:
+        updates["error_code"] = error_code
+    if error_message is not None:
+        updates["error_message"] = error_message
+    return updates
+
+
+def _apply_transition_updates(run: AgentRun, updates: dict[str, Any]) -> None:
+    for field, value in updates.items():
+        setattr(run, field, value)
+
+
+async def transition_run_if_status(
+    run: AgentRun,
+    expected_status: AgentRunStatus,
+    status: AgentRunStatus,
+    *,
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> AgentRun | None:
+    """Transition only if the database row still has ``expected_status``.
+
+    The conditional update closes lifecycle races with stop requests and other
+    workers.  A ``None`` result means another actor won the transition.
+    """
+    updates = _transition_updates(
+        run,
+        status,
+        updated_at=now_utc(),
+        error_code=error_code,
+        error_message=error_message,
+    )
+    changed = await AgentRun.filter(id=run.id, status=expected_status).update(**updates)
+    if changed != 1:
+        return None
+    _apply_transition_updates(run, updates)
+    await _write_state_cache(run.id, status)
+    return run
+
+
+async def claim_queued_run(run_id: UUID) -> AgentRun | None:
+    """Atomically claim a queued run for one worker."""
+    claimed_at = now_utc()
+    async with in_transaction() as conn:
+        run = await (
+            AgentRun.filter(id=run_id, status=AgentRunStatus.QUEUED)
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
+        if run is None:
+            return None
+        run.status = AgentRunStatus.RUNNING
+        run.updated_at = claimed_at
+        update_fields = ["status", "updated_at"]
+        if run.started_at is None:
+            run.started_at = claimed_at
+            update_fields.append("started_at")
+        await run.save(using_db=conn, update_fields=update_fields)
+    await _write_state_cache(run_id, AgentRunStatus.RUNNING)
+    return run
+
+
 async def transition_run(
     run: AgentRun,
     status: AgentRunStatus,
@@ -84,22 +170,16 @@ async def transition_run(
     error_code: str | None = None,
     error_message: str | None = None,
 ) -> AgentRun:
-    run.status = status
-    run.updated_at = now_utc()
-    if status == AgentRunStatus.RUNNING and run.started_at is None:
-        run.started_at = now_utc()
-    if status in (
-        AgentRunStatus.COMPLETED,
-        AgentRunStatus.STOPPED,
-        AgentRunStatus.FAILED,
-        AgentRunStatus.INTERRUPTED,
-    ):
-        run.finished_at = now_utc()
-    if error_code is not None:
-        run.error_code = error_code
-    if error_message is not None:
-        run.error_message = error_message
-    await run.save()
+    updated_at = now_utc()
+    updates = _transition_updates(
+        run,
+        status,
+        updated_at=updated_at,
+        error_code=error_code,
+        error_message=error_message,
+    )
+    _apply_transition_updates(run, updates)
+    await run.save(update_fields=list(updates))
     await _write_state_cache(run.id, status)
     return run
 
@@ -335,9 +415,10 @@ async def stop_waiting_run(run_id: UUID) -> AgentRun | None:
         )
         if run is None or run.status != AgentRunStatus.WAITING:
             return None
+        stopped_at = now_utc()
         run.status = AgentRunStatus.STOPPED
-        run.finished_at = now_utc()
-        run.updated_at = now_utc()
+        run.finished_at = stopped_at
+        run.updated_at = stopped_at
         run.pending_tool_call_id = None
         run.pending_tool_name = None
         run.pending_tool_input = None
@@ -357,6 +438,26 @@ async def stop_waiting_run(run_id: UUID) -> AgentRun | None:
                 "pending_tool_round_index",
                 "pending_tool_iteration_index",
             ],
+        )
+    await _write_state_cache(run_id, AgentRunStatus.STOPPED)
+    return run
+
+
+async def stop_queued_run(run_id: UUID) -> AgentRun | None:
+    """Atomically stop a run that is queued before worker execution starts."""
+    async with in_transaction() as conn:
+        run = await (
+            AgentRun.filter(id=run_id).using_db(conn).select_for_update().first()
+        )
+        if run is None or run.status != AgentRunStatus.QUEUED:
+            return None
+        stopped_at = now_utc()
+        run.status = AgentRunStatus.STOPPED
+        run.finished_at = stopped_at
+        run.updated_at = stopped_at
+        await run.save(
+            using_db=conn,
+            update_fields=["status", "finished_at", "updated_at"],
         )
     await _write_state_cache(run_id, AgentRunStatus.STOPPED)
     return run
@@ -443,13 +544,15 @@ async def mark_expired_runs_interrupted(*, max_age_seconds: int = 120) -> int:
         if current == str(run.id):
             # still within lease; skip
             continue
-        await transition_run(
+        transitioned = await transition_run_if_status(
             run,
+            run.status,
             AgentRunStatus.INTERRUPTED,
             error_code="worker_loss",
             error_message="Run worker lost before completion",
         )
-        marked += 1
+        if transitioned is not None:
+            marked += 1
     return marked
 
 

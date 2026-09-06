@@ -1,4 +1,4 @@
-// GENERATED — 2026-08-31T02:51:53.466Z
+// GENERATED — 2026-09-06T11:41:22.936Z
 // Source: i18n/en/embed.json
 export type EmbedMessages = {
   embed: {

@@ -1,4 +1,4 @@
-// GENERATED — 2026-08-31T02:51:53.467Z
+// GENERATED — 2026-09-06T11:41:22.939Z
 // Source: i18n/en/knowledgeBases.json
 export type KnowledgeBasesMessages = {
   knowledgeBases: {
@@ -115,6 +115,20 @@ export type KnowledgeBasesMessages = {
     bulkDocumentsDeleted: string
     reprocess: string
     downloadOriginal: string
+    previewOriginal: string
+    previewOriginalTitle: string
+    previewOriginalLoading: string
+    previewOriginalUnavailable: string
+    previewOriginalLoadError: string
+    previewOriginalTooLarge: string
+    previewOriginalDownload: string
+    previewOriginalClose: string
+    previewOriginalSheet: string
+    previewOriginalRowsLimited: string
+    previewOriginalParseError: string
+    previewOriginalZoomIn: string
+    previewOriginalZoomOut: string
+    previewOriginalFitToView: string
     viewSourceUrl: string
     downloadStarted: string
     downloadFailed: string

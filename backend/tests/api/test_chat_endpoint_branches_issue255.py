@@ -299,3 +299,265 @@ async def test_load_owned_run_allows_superuser_to_access_any_conversation(monkey
 
     assert loaded is run
     _Conv.get_or_none.assert_awaited_once_with(id=conv_id)
+
+
+@pytest.mark.asyncio
+async def test_post_run_answer_rejects_non_waiting_and_wrong_tool(monkeypatch):
+    from app.services import agent_run_store
+
+    agent_id = uuid4()
+    run_id = uuid4()
+    current_user = SimpleNamespace(id=uuid4())
+    monkeypatch.setattr(chat.deps, "check_api_key_agent_access", AsyncMock())
+    monkeypatch.setattr(
+        chat, "_split_run_auth", MagicMock(return_value=(current_user, None))
+    )
+
+    for status, expected_message in (
+        (AgentRunStatus.RUNNING, "run is not waiting for user answers"),
+        (AgentRunStatus.WAITING, "tool call does not match the pending interaction"),
+    ):
+        monkeypatch.setattr(
+            chat,
+            "_load_owned_run",
+            AsyncMock(return_value=SimpleNamespace(status=status)),
+        )
+        monkeypatch.setattr(
+            agent_run_store, "submit_user_answers", AsyncMock(return_value=None)
+        )
+
+        with pytest.raises(BusinessError) as exc_info:
+            await chat.post_run_answer(
+                agent_id,
+                run_id,
+                RunAnswerCreate(tool_call_id="call-1", answers={}),
+                auth_result=(current_user, None),
+            )
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.msg == expected_message
+
+
+@pytest.mark.asyncio
+async def test_post_run_answer_enqueue_failure_publishes_terminal_events(monkeypatch):
+    from app.services import agent_run_stream, agent_run_store
+    from app.tasks.agent import run_agent_task
+
+    agent_id = uuid4()
+    run_id = uuid4()
+    current_user = SimpleNamespace(id=uuid4())
+    original = SimpleNamespace(status=AgentRunStatus.WAITING)
+    resumed = SimpleNamespace(worker_payload=None)
+    stream = SimpleNamespace(seed_sequence=AsyncMock(), publish=AsyncMock())
+    monkeypatch.setattr(chat.deps, "check_api_key_agent_access", AsyncMock())
+    monkeypatch.setattr(chat, "_load_owned_run", AsyncMock(return_value=original))
+    monkeypatch.setattr(
+        agent_run_store, "submit_user_answers", AsyncMock(return_value=resumed)
+    )
+    monkeypatch.setattr(
+        run_agent_task,
+        "apply_async",
+        MagicMock(side_effect=RuntimeError("broker down")),
+    )
+    monkeypatch.setattr(
+        agent_run_store,
+        "transition_run_if_status",
+        AsyncMock(return_value=resumed),
+    )
+    monkeypatch.setattr(agent_run_stream, "AgentRunStream", lambda _run_id: stream)
+    monkeypatch.setattr(chat, "_run_to_out", lambda run: run)
+    monkeypatch.setattr(chat, "success", lambda *, data: {"data": data})
+
+    with pytest.raises(RuntimeError, match="run resume payload is missing"):
+        await chat.post_run_answer(
+            agent_id,
+            run_id,
+            RunAnswerCreate(tool_call_id="call-1", answers={}),
+            auth_result=(current_user, None),
+        )
+
+    assert [call.args for call in stream.publish.await_args_list] == [
+        ("error", {"code": "enqueue_failed", "msg": "Unable to resume run"}),
+        ("run_end", {"status": "failed"}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_post_run_answer_enqueue_failure_skips_events_after_lost_transition(
+    monkeypatch,
+):
+    from app.services import agent_run_stream, agent_run_store
+    from app.tasks.agent import run_agent_task
+
+    agent_id = uuid4()
+    run_id = uuid4()
+    current_user = SimpleNamespace(id=uuid4())
+    original = SimpleNamespace(status=AgentRunStatus.WAITING)
+    resumed = SimpleNamespace(worker_payload={})
+    stream_factory = MagicMock()
+    monkeypatch.setattr(chat.deps, "check_api_key_agent_access", AsyncMock())
+    monkeypatch.setattr(chat, "_load_owned_run", AsyncMock(return_value=original))
+    monkeypatch.setattr(
+        agent_run_store, "submit_user_answers", AsyncMock(return_value=resumed)
+    )
+    monkeypatch.setattr(
+        run_agent_task,
+        "apply_async",
+        MagicMock(side_effect=RuntimeError("broker down")),
+    )
+    monkeypatch.setattr(
+        agent_run_store,
+        "transition_run_if_status",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(agent_run_stream, "AgentRunStream", stream_factory)
+
+    with pytest.raises(RuntimeError, match="broker down"):
+        await chat.post_run_answer(
+            agent_id,
+            run_id,
+            RunAnswerCreate(tool_call_id="call-1", answers={}),
+            auth_result=(current_user, None),
+        )
+
+    stream_factory.assert_not_called()
+
+
+def _patch_run_route(monkeypatch, run):
+    current_user = SimpleNamespace(id=uuid4())
+    monkeypatch.setattr(chat.deps, "check_api_key_agent_access", AsyncMock())
+    monkeypatch.setattr(chat, "_load_owned_run", AsyncMock(return_value=run))
+    monkeypatch.setattr(chat, "_run_to_out", lambda value: value)
+    monkeypatch.setattr(chat, "success", lambda *, data: {"data": data})
+    return current_user
+
+
+@pytest.mark.asyncio
+async def test_stop_run_waiting_success_publishes_run_end(monkeypatch):
+    from app.services import agent_run_stream, agent_run_store
+
+    run_id = uuid4()
+    stopped = SimpleNamespace(status=AgentRunStatus.STOPPED)
+    current_user = _patch_run_route(
+        monkeypatch, SimpleNamespace(status=AgentRunStatus.WAITING)
+    )
+    stream = SimpleNamespace(seed_sequence=AsyncMock(), publish=AsyncMock())
+    monkeypatch.setattr(
+        agent_run_store, "stop_waiting_run", AsyncMock(return_value=stopped)
+    )
+    monkeypatch.setattr(agent_run_stream, "AgentRunStream", lambda _run_id: stream)
+
+    result = await chat.stop_run(uuid4(), run_id, auth_result=(current_user, None))
+
+    assert result == {"data": stopped}
+    stream.publish.assert_awaited_once_with("run_end", {"status": "stopped"})
+
+
+@pytest.mark.asyncio
+async def test_stop_run_waiting_race_reloads_terminal_run(monkeypatch):
+    from app.services import agent_run_store
+
+    run_id = uuid4()
+    terminal = SimpleNamespace(status=AgentRunStatus.COMPLETED)
+    current_user = _patch_run_route(
+        monkeypatch, SimpleNamespace(status=AgentRunStatus.WAITING)
+    )
+    monkeypatch.setattr(
+        agent_run_store, "stop_waiting_run", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        chat._AgentRunModel, "get_or_none", AsyncMock(return_value=terminal)
+    )
+
+    result = await chat.stop_run(uuid4(), run_id, auth_result=(current_user, None))
+
+    assert result == {"data": terminal}
+
+
+@pytest.mark.asyncio
+async def test_stop_run_queued_success_without_task_id_publishes_run_end(monkeypatch):
+    from app.services import agent_run_stream, agent_run_store
+
+    run_id = uuid4()
+    stopped = SimpleNamespace(status=AgentRunStatus.STOPPED, celery_task_id=None)
+    current_user = _patch_run_route(
+        monkeypatch, SimpleNamespace(status=AgentRunStatus.QUEUED)
+    )
+    stream = SimpleNamespace(seed_sequence=AsyncMock(), publish=AsyncMock())
+    monkeypatch.setattr(
+        agent_run_store, "stop_queued_run", AsyncMock(return_value=stopped)
+    )
+    monkeypatch.setattr(agent_run_stream, "AgentRunStream", lambda _run_id: stream)
+
+    result = await chat.stop_run(uuid4(), run_id, auth_result=(current_user, None))
+
+    assert result == {"data": stopped}
+    stream.publish.assert_awaited_once_with("run_end", {"status": "stopped"})
+
+
+@pytest.mark.asyncio
+async def test_stop_run_queued_race_reloads_terminal_run(monkeypatch):
+    from app.services import agent_run_store
+
+    run_id = uuid4()
+    terminal = SimpleNamespace(status=AgentRunStatus.COMPLETED)
+    current_user = _patch_run_route(
+        monkeypatch, SimpleNamespace(status=AgentRunStatus.QUEUED)
+    )
+    monkeypatch.setattr(
+        agent_run_store, "stop_queued_run", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        chat._AgentRunModel, "get_or_none", AsyncMock(return_value=terminal)
+    )
+
+    result = await chat.stop_run(uuid4(), run_id, auth_result=(current_user, None))
+
+    assert result == {"data": terminal}
+
+
+@pytest.mark.asyncio
+async def test_stop_run_running_race_retries_and_queues_stop(monkeypatch):
+    from app.services import agent_run_store
+
+    run_id = uuid4()
+    refreshed = SimpleNamespace(status=AgentRunStatus.RUNNING)
+    stopping = SimpleNamespace(status=AgentRunStatus.STOPPING)
+    current_user = _patch_run_route(
+        monkeypatch, SimpleNamespace(status=AgentRunStatus.RUNNING)
+    )
+    transition = AsyncMock(side_effect=[None, None])
+    enqueue = AsyncMock()
+    monkeypatch.setattr(agent_run_store, "transition_run_if_status", transition)
+    monkeypatch.setattr(agent_run_store, "enqueue_input", enqueue)
+    monkeypatch.setattr(
+        chat._AgentRunModel,
+        "get_or_none",
+        AsyncMock(side_effect=[refreshed, stopping]),
+    )
+
+    result = await chat.stop_run(uuid4(), run_id, auth_result=(current_user, None))
+
+    assert result == {"data": stopping}
+    enqueue.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_run_running_race_returns_terminal_reload(monkeypatch):
+    from app.services import agent_run_store
+
+    run_id = uuid4()
+    terminal = SimpleNamespace(status=AgentRunStatus.COMPLETED)
+    current_user = _patch_run_route(
+        monkeypatch, SimpleNamespace(status=AgentRunStatus.RUNNING)
+    )
+    monkeypatch.setattr(
+        agent_run_store, "transition_run_if_status", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        chat._AgentRunModel, "get_or_none", AsyncMock(return_value=terminal)
+    )
+
+    result = await chat.stop_run(uuid4(), run_id, auth_result=(current_user, None))
+
+    assert result == {"data": terminal}

@@ -42,17 +42,13 @@ async def test_embedding_boundaries_use_team_model_and_preserve_provider_errors(
 async def test_store_chunks_with_progress_reports_success_and_failure(monkeypatch):
     chunks = []
 
-    async def create_chunk(**values):
-        chunk = SimpleNamespace(
-            id=f"chunk-{len(chunks)}",
-            status=values["status"],
-            error_message=None,
-            save=AsyncMock(),
-        )
-        chunks.append(chunk)
-        return chunk
+    async def bulk_create(items, using_db=None):
+        chunks.extend(items)
+        for chunk in items:
+            chunk.save = AsyncMock()
 
-    monkeypatch.setattr(vector_store.DocumentChunk, "create", create_chunk)
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_create", bulk_create)
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_update", AsyncMock())
     ensure_dimension = AsyncMock()
     monkeypatch.setattr(vector_store, "_ensure_kb_dimension", ensure_dimension)
 
@@ -60,7 +56,8 @@ async def test_store_chunks_with_progress_reports_success_and_failure(monkeypatc
     store.embed_texts = AsyncMock(
         side_effect=[[[0.1, 0.2]], RuntimeError("embedding failed")]
     )
-    store._store_embedding = AsyncMock()
+    batch_store = AsyncMock()
+    store._batch_store_embeddings = batch_store
     progress = AsyncMock()
     document = SimpleNamespace(id=DOCUMENT_ID, knowledge_base_id=KB_ID)
 
@@ -71,13 +68,14 @@ async def test_store_chunks_with_progress_reports_success_and_failure(monkeypatc
             {"content": "bad", "chunk_index": 1},
         ],
         progress_callback=progress,
+        batch_size=1,
     )
 
     assert result == chunks
     assert [chunk.status for chunk in chunks] == ["embedded", "failed"]
     assert chunks[1].error_message == "document_process_failed"
     ensure_dimension.assert_awaited_once_with(KB_ID, 2)
-    store._store_embedding.assert_awaited_once()
+    batch_store.assert_awaited_once()
     assert [call.args for call in progress.await_args_list] == [(1, 0, 2), (1, 1, 2)]
 
     assert await store.store_chunks_with_progress(document, []) == []
@@ -172,3 +170,77 @@ async def test_embedding_stats_cover_database_and_qdrant_boundaries(monkeypatch)
     client.count.assert_awaited_once_with(
         collection_name="kb_dim_3", count_filter="kb-filter", exact=True
     )
+
+
+@pytest.mark.asyncio
+async def test_store_chunks_with_progress_rejects_non_positive_batch_size():
+    with pytest.raises(ValueError, match="positive"):
+        await VectorStore().store_chunks_with_progress(
+            SimpleNamespace(id=DOCUMENT_ID, knowledge_base_id=None),
+            [{"content": "text", "chunk_index": 0}],
+            batch_size=0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_store_chunks_with_progress_precreates_inside_transaction(monkeypatch):
+    created = []
+
+    class Transaction:
+        async def __aenter__(self):
+            return "connection"
+
+        async def __aexit__(self, *_args):
+            return False
+
+    async def bulk_create(items, using_db=None):
+        assert using_db == "connection"
+        created.extend(items)
+        for item in items:
+            item.save = AsyncMock()
+
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_create", bulk_create)
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_update", AsyncMock())
+    monkeypatch.setattr(
+        vector_store.DocumentChunk._meta, "default_connection", "default"
+    )
+    monkeypatch.setattr(vector_store.Tortoise, "is_inited", staticmethod(lambda: True))
+    monkeypatch.setattr(vector_store, "in_transaction", lambda: Transaction())
+
+    store = VectorStore()
+    store.embed_texts = AsyncMock(return_value=[[0.1, 0.2]])
+    store._batch_store_embeddings = AsyncMock()
+    result = await store.store_chunks_with_progress(
+        SimpleNamespace(id=DOCUMENT_ID, knowledge_base_id="legacy-kb"),
+        [{"content": "text", "chunk_index": 0}],
+    )
+
+    assert result == created
+    assert result[0].status == "embedded"
+
+
+@pytest.mark.asyncio
+async def test_store_chunks_with_progress_falls_back_for_legacy_kb(monkeypatch):
+    created = []
+
+    async def bulk_create(items, using_db=None):
+        created.extend(items)
+        for item in items:
+            item.save = AsyncMock()
+
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_create", bulk_create)
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_update", AsyncMock())
+
+    store = VectorStore()
+    store.embed_texts = AsyncMock(
+        side_effect=[RuntimeError("batch failed"), [[0.1, 0.2]]]
+    )
+    store._store_embedding = AsyncMock()
+    result = await store.store_chunks_with_progress(
+        SimpleNamespace(id=DOCUMENT_ID, knowledge_base_id="legacy-kb"),
+        [{"content": "text", "chunk_index": 0}],
+    )
+
+    assert result == created
+    assert result[0].status == "embedded"
+    store._store_embedding.assert_awaited_once()
