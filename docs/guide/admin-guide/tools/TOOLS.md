@@ -360,3 +360,24 @@ When an Agent needs to perform an action:
 - **Specific parameters**: Define parameters with clear names and descriptions
 - **Error handling**: Tools should return meaningful error messages
 - **Test thoroughly**: Test tools with various inputs before production use
+
+### Custom Tool Naming Conventions & Chat Status Visibility
+
+When an Agent calls tools during reasoning, the top **Chain of Thought header** automatically surfaces the action without requiring users to expand the collapsible panel. Follow these naming conventions to ensure the most intuitive status display:
+
+#### 1. Recommended Verb Prefixes
+
+| Action Type | Recommended Prefix / Keywords | CoT Header Display |
+| :--- | :--- | :--- |
+| **Query / Retrieval** | `query_`, `fetch_`, `get_`, `search_`, `find_`, `check_` | `Querying {tool}...` |
+| **Sending / Notifications** | `send_`, `post_`, `push_`, `notify_`, `mail_` | `Sending {tool}...` |
+| **Creation** | `create_`, `add_`, `insert_`, `new_`, `build_` | `Creating {tool}...` |
+| **External API / Requests** | `api_`, `http_`, `rest_`, `request_`, or input has `url`/`endpoint` | `Requesting {tool}...` |
+| **Computation / Analysis** | `calc_`, `math_`, `count_`, `analyze_`, `stat_` | `Calculating...` |
+| **Artifacts & Downloads** | `artifact`, `artifacts`, contains `Create Download Link` | `Collecting artifacts...` |
+| **Files / Documents** | `read_`, `write_`, `open_file`, `save_file` | `Reading / Editing file...` |
+#### 2. Display Name Tips
+
+- **Provide a friendly Display Name**: If configured (e.g., `Fetch Stock Quotes` or `Send Slack Notification`), the CoT header directly uses this name for status rendering.
+- **Automatic Identifier Beautification**: Raw identifiers like `fetch_user_orders` or `syncCrmAccount` are automatically converted to clean phrases (e.g., `Querying Fetch User Orders...`).
+- **Parallel Call Aggregation**: When multiple tools execute simultaneously, the header aggregates them into `Calling {N} tools in parallel...` to preserve clean UI presentation.
