@@ -32,9 +32,10 @@ function render(element: React.ReactElement) {
 test('renders docx preview container and handles render errors gracefully', async () => {
   const onError = mock(() => {})
   const container = render(<DocxPreview blob={new Blob(['not a real docx'])} onError={onError} />)
-  
   await act(async () => {
-    await Bun.sleep(50)
+    for (let attempt = 0; attempt < 100 && onError.mock.calls.length === 0; attempt += 1) {
+      await Bun.sleep(10)
+    }
   })
 
   expect(container.querySelector('div')).toBeTruthy()

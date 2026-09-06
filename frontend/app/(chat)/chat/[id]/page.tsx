@@ -118,6 +118,7 @@ export default function PublicChatPage({
   })
   const [conversations, setConversations] = React.useState<ConversationListItem[]>([])
   const [runningConversationIds, setRunningConversationIds] = React.useState<Set<string>>(() => new Set())
+  const runStatusPollGenerationRef = React.useRef(0)
 
   const [loadingConversations, setLoadingConversations] = React.useState(false)
   const [conversationPage, setConversationPage] = React.useState(1)
@@ -349,18 +350,24 @@ export default function PublicChatPage({
 
     let cancelled = false
     const refreshRunStatuses = async () => {
+      const pollGeneration = ++runStatusPollGenerationRef.current
       const runningIds = await Promise.all(conversations.map(async (conversation) => {
         const snapshot = getStoredRunSnapshot(resolvedParams.id, conversation.id)
         if (!snapshot) return null
         try {
           const status = await getRunStatus(resolvedParams.id, snapshot.runId)
+          if (cancelled || pollGeneration !== runStatusPollGenerationRef.current) return null
+
           const isActive = status.status === 'queued'
             || status.status === 'running'
             || status.status === 'stopping'
             || status.status === 'completing'
           const isWaiting = status.status === 'waiting'
           if (!isActive && !isWaiting && conversation.id !== conversationId) {
-            removeRunSnapshot(resolvedParams.id, conversation.id)
+            const currentSnapshot = getStoredRunSnapshot(resolvedParams.id, conversation.id)
+            if (currentSnapshot?.runId === snapshot.runId) {
+              removeRunSnapshot(resolvedParams.id, conversation.id)
+            }
           }
           return isActive ? conversation.id : null
         } catch {
@@ -368,30 +375,32 @@ export default function PublicChatPage({
         }
       }))
 
-      if (!cancelled) {
-        const nextRunningIds = new Set(runningIds.filter((id): id is string => id !== null))
-        setRunningConversationIds((previous) => {
-          if (previous.size === nextRunningIds.size) {
-            let unchanged = true
-            for (const id of previous) {
-              if (!nextRunningIds.has(id)) {
-                unchanged = false
-                break
-              }
+      if (cancelled || pollGeneration !== runStatusPollGenerationRef.current) return
+
+      const nextRunningIds = new Set(runningIds.filter((id): id is string => id !== null))
+      setRunningConversationIds((previous) => {
+        if (previous.size === nextRunningIds.size) {
+          let unchanged = true
+          for (const id of previous) {
+            if (!nextRunningIds.has(id)) {
+              unchanged = false
+              break
             }
-            if (unchanged) return previous
           }
-          return nextRunningIds
-        })
-      }
+          if (unchanged) return previous
+        }
+        return nextRunningIds
+      })
     }
 
     void refreshRunStatuses()
     const interval = globalThis.setInterval(() => { void refreshRunStatuses() }, 2000)
     return () => {
       cancelled = true
+      runStatusPollGenerationRef.current += 1
       globalThis.clearInterval(interval)
     }
+
   }, [adapter, conversationId, conversations, embedMode, resolvedParams])
 
   // Load conversation from URL parameter
