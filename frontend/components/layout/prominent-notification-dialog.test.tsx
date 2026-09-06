@@ -55,18 +55,21 @@ mock.module('@/lib/api/workflows', () => ({
   workflowsApi: { getPendingPauseRequest, submitPauseRequest },
 }))
 
+mock.module('streamdown', () => ({
+  Streamdown: ({ children }: { children: React.ReactNode }) => <div data-streamdown>{children}</div>,
+}))
 import { notificationsApi, type NotificationItem } from '@/lib/api'
 import { ProminentNotificationDialog } from './prominent-notification-dialog'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-const notification = (id: string, title: string, linkUrl?: string): NotificationItem => ({
+const notification = (id: string, title: string, linkUrl?: string, content = `${title} content`): NotificationItem => ({
   id,
   scope: 'global',
   type: 'announcement',
   source: 'system',
   title,
-  content: `${title} content`,
+  content,
   level: 'high',
   link_url: linkUrl,
   status: 'active',
@@ -74,6 +77,21 @@ const notification = (id: string, title: string, linkUrl?: string): Notification
   updated_at: '2026-01-01T00:00:00Z',
   is_read: false,
 })
+  test('renders Markdown content through the Markdown renderer', async () => {
+    spyOn(notificationsApi, 'list').mockResolvedValue({
+      items: [notification('one', 'First', undefined, '**First content**\n\n- Item'), notification('two', 'Second')], total: 2, page: 1, page_size: 50,
+    })
+    const markRead = spyOn(notificationsApi, 'markRead').mockResolvedValue({ updated: 1 })
+    const renderer = await render()
+
+    expect(renderer.root.findByProps({ 'data-streamdown': true }).props.children).toBe('**First content**\n\n- Item')
+    expect(JSON.stringify(renderer.toJSON())).toContain('kindOptions.general')
+
+    await act(async () => renderer.root.findAllByType('button')[0].props.onClick())
+
+    expect(markRead).toHaveBeenCalledWith({ notification_ids: ['one'] })
+    expect(JSON.stringify(renderer.toJSON())).toContain('Second content')
+  })
 
 const renderers: ReactTestRenderer[] = []
 

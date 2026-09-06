@@ -4,6 +4,7 @@ import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Megaphone, ShieldAlert, Sparkles } from 'lucide-react'
+import { Streamdown } from 'streamdown'
 import { notificationsApi, type NotificationItem } from '@/lib/api'
 import { PauseRequestActions } from '@/components/chat/pause-request-actions'
 import { getNotificationDisplayMeta, getPauseActionMeta, type NotificationDisplayKind } from '@/lib/notifications/display'
@@ -12,10 +13,8 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog'
 
 const KIND_ICON: Record<NotificationDisplayKind, React.ComponentType<{ className?: string }>> = {
@@ -115,16 +114,16 @@ export function ProminentNotificationDialog() {
               {t(`kindOptions.${meta.kind}`)}
             </Badge>
           </div>
-          <DialogTitle>{t('prominentTitle')}</DialogTitle>
-          <DialogDescription>{t('prominentDescription')}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-2">
+        <div className="min-w-0 flex-1 overflow-x-auto overflow-y-auto -mx-6 px-6 space-y-2">
           <p className="font-medium">{selectedItem.title}</p>
           {/* Approval notifications carry a snapshot summary; the live pause
               request replaces it to avoid showing the content twice. */}
           {!selectedPauseMeta && (
-            <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/90">{selectedItem.content}</p>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/90 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+              <Streamdown>{selectedItem.content}</Streamdown>
+            </div>
           )}
 
           {selectedPauseMeta && (
