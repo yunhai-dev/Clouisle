@@ -1,4 +1,4 @@
-// GENERATED — 2026-09-05T12:35:15.049Z
+// GENERATED — 2026-09-06T11:41:22.922Z
 // Source: i18n/en/chat.json
 export type ChatMessages = {
   chat: {
@@ -26,6 +26,22 @@ export type ChatMessages = {
       toolCallCompleted: string
       toolCallFailed: string
       taskAction: string
+      actionReadingFile: string
+      actionEditingFile: string
+      actionBrowsingDir: string
+      actionRunningCode: string
+      actionExecutingCommand: string
+      actionCalculating: string
+      actionSearchingWeb: string
+      actionSearchingKb: string
+      actionGeneratingMedia: string
+      actionCollectingArtifacts: string
+      actionCallingTool: string
+      actionCallingToolsParallel: string
+      actionQueryingTool: string
+      actionSendingTool: string
+      actionCreatingTool: string
+      actionRequestingTool: string
     }
     tool: {
       running: string
@@ -165,6 +181,13 @@ export type ChatMessages = {
       artifactPreviewLoading: string
       artifactPreviewUnavailable: string
       artifactPreviewLoadError: string
+      artifactPreviewTooLarge: string
+      filePreviewSheet: string
+      filePreviewRowsLimited: string
+      filePreviewParseError: string
+      filePreviewZoomIn: string
+      filePreviewZoomOut: string
+      filePreviewFitToView: string
       previewScriptsEnabled: string
       linkSafetyTitle: string
       linkSafetyDescription: string

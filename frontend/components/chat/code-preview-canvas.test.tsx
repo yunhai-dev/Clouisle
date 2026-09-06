@@ -345,17 +345,17 @@ test('renders artifact metadata and keeps unsupported files downloadable', () =>
     kind: 'artifact',
     file: {
       type: 'file',
-      filename: 'report.docx',
-      url: '/files/report.docx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      filename: 'report.bin',
+      url: '/files/report.bin',
+      mimeType: 'application/octet-stream',
     },
   })
 
   expect(text(tree)).toContain('artifactPreviewCanvasTitle')
-  expect(text(tree)).toContain('report.docx')
+  expect(text(tree)).toContain('report.bin')
   expect(text(tree)).toContain('artifactPreviewUnavailable')
   click(findByAriaLabel(tree, 'mermaidDownloadLabel'))
-  expect(appendedLink).toMatchObject({ href: '/files/report.docx', download: 'report.docx', clicked: true })
+  expect(appendedLink).toMatchObject({ href: '/files/report.bin', download: 'report.bin', clicked: true })
 })
 
 test('renders mermaid loading state without script iframe', () => {
@@ -636,9 +636,9 @@ test('artifact preview loads same-origin content and renders it in the matching 
   effects[0]?.()
   await Bun.sleep(0)
 
-  expect(stateValues[1]).toBe('graph TD; A-->B;') // textContent
-  expect(stateValues[2]).toBe(false)              // isLoading
-  expect(stateValues[3]).toBe(false)              // loadFailed
+  expect(stateValues[3]).toBe('graph TD; A-->B;') // text content
+  expect(stateValues[0]).toBe('ready')
+  expect(stateValues[4]).toBe(false)
 })
 
 test('artifact preview reports load failures and rejects cross-origin URLs', async () => {
@@ -651,7 +651,7 @@ test('artifact preview reports load failures and rejects cross-origin URLs', asy
   walk(failing)
   effects[0]?.()
   await Bun.sleep(0)
-  expect(stateValues[3]).toBe(true) // loadFailed
+  expect(stateValues[0]).toBe('error')
 
   // Cross-origin URLs are rejected without fetching
   globalThis.fetch = mock()
@@ -663,7 +663,7 @@ test('artifact preview reports load failures and rejects cross-origin URLs', asy
   walk(cross)
   effects[0]?.()
   await Bun.sleep(0)
-  expect(stateValues[3]).toBe(true)
+  expect(stateValues[0]).toBe('error')
   expect(globalThis.fetch).not.toHaveBeenCalled()
 })
 

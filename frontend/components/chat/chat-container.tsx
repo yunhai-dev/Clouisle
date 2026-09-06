@@ -587,6 +587,7 @@ export function ChatContainer({
           {visibleMessages.map((message, index) => {
             const messageIndex = hiddenMessageCount + index;
             const isCurrentStreaming = isStreaming && messageIndex === messages.length - 1;
+            const isGenerating = isCurrentStreaming || Boolean(message.metadata?.isLoading);
             const messageArtifacts = getMessageArtifacts(message);
             return (
               <ChatMessageRow
@@ -595,7 +596,7 @@ export function ChatContainer({
                 loadingLabel={loadingLabel}
                 isCurrentStreaming={isCurrentStreaming}
                 renderPart={renderPart}
-                afterContent={messageArtifacts.length > 0 ? (
+                afterContent={messageArtifacts.length > 0 && !isGenerating ? (
                   <ArtifactFileList
                     key={`artifacts-${message.id}`}
                     files={messageArtifacts}

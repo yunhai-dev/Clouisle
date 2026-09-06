@@ -57,16 +57,17 @@ import {
   isToolResultPart,
   isMcpToolCallPart,
   isMcpToolResultPart,
+  isTaskPart,
   isSourcePart,
   isSourceDocumentPart,
   isFilePart,
   isImagePart,
   isMediaResultPart,
-  isTaskPart,
   isTruncatedPart,
   isStoppedPart,
   isIterationCapReachedPart,
 } from './types'
+import { getActiveToolActions } from './tool-action-utils'
 import { SourceContent } from './message-parts'
 import {
   getImageAssetUrl,
@@ -495,12 +496,12 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
       otherPartEntries,
       hasIterationCapMarker,
     } = React.useMemo(() => {
-      const nextAllSources: (SourceUrlPart | SourceDocumentPart)[] = []
+      const nextAllSources: Array<SourceUrlPart | SourceDocumentPart> = []
       const nextDocumentSources: SourceDocumentPart[] = []
       const nextOtherPartEntries: Array<{ part: MessagePart; index: number }> = []
       let nextHasIterationCapMarker = false
-
-      for (const [index, part] of message.parts.entries()) {
+      const parts = message.parts || []
+      for (const [index, part] of parts.entries()) {
         if (isSourcePart(part)) {
           nextAllSources.push(part as SourceUrlPart | SourceDocumentPart)
           if (isSourceDocumentPart(part)) {
@@ -537,7 +538,7 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
     // Get text content for copying (strip citation markers)
     const textContent = React.useMemo(() => {
       const parts: string[] = []
-      for (const part of message.parts) {
+      for (const part of message.parts || []) {
         if (
           isTextPart(part)
           && !(hasIterationCapMarker && part.text.trim() === iterationCapLabel)
@@ -903,6 +904,16 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
 
       if (isFilePart(part)) {
         const filePart = part as FilePart
+        const handleOpenPreview = filePart.url && onOpenCodePreview
+          ? (event: React.MouseEvent<HTMLElement>) => {
+            event.preventDefault()
+            onOpenCodePreview({
+              id: `file:${filePart.url}`,
+              kind: 'file',
+              file: filePart,
+            })
+          }
+          : undefined
         return (
           <MessageAttachment
             key={index}
@@ -912,6 +923,7 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
               filename: filePart.filename,
               mediaType: filePart.mimeType || 'application/octet-stream',
             }}
+            onClick={handleOpenPreview}
           />
         )
       }
@@ -1055,6 +1067,56 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
       || isStreaming
     )
 
+    // Compute total reasoning duration if available
+    const totalReasoningDuration = React.useMemo(() => {
+      let totalMs = 0
+      let hasDuration = false
+      for (const part of reasoningParts) {
+        if (typeof part.duration === 'number' && part.duration > 0) {
+          totalMs += part.duration
+          hasDuration = true
+        }
+      }
+      return hasDuration ? totalMs : null
+    }, [reasoningParts])
+
+    const activeToolActions = React.useMemo(() => {
+      return getActiveToolActions(message.parts || [])
+    }, [message.parts])
+
+    const chainOfThoughtTitle = React.useMemo(() => {
+      if (isChainOfThoughtStreaming) {
+        if (activeToolActions.length === 1) {
+          const action = activeToolActions[0]
+          switch (action.category) {
+            case 'reading_file': return tReasoning('actionReadingFile')
+            case 'editing_file': return tReasoning('actionEditingFile')
+            case 'browsing_dir': return tReasoning('actionBrowsingDir')
+            case 'running_code': return tReasoning('actionRunningCode')
+            case 'executing_command': return tReasoning('actionExecutingCommand')
+            case 'calculating': return tReasoning('actionCalculating')
+            case 'searching_web': return tReasoning('actionSearchingWeb')
+            case 'searching_kb': return tReasoning('actionSearchingKb')
+            case 'generating_media': return tReasoning('actionGeneratingMedia')
+            case 'collecting_artifacts': return tReasoning('actionCollectingArtifacts')
+            case 'querying_custom': return tReasoning('actionQueryingTool', { tool: action.displayName })
+            case 'sending_custom': return tReasoning('actionSendingTool', { tool: action.displayName })
+            case 'creating_custom': return tReasoning('actionCreatingTool', { tool: action.displayName })
+            case 'requesting_custom': return tReasoning('actionRequestingTool', { tool: action.displayName })
+            default: return tReasoning('actionCallingTool', { tool: action.displayName })
+          }
+        }
+        if (activeToolActions.length > 1) {
+          return tReasoning('actionCallingToolsParallel', { count: activeToolActions.length })
+        }
+        return tReasoning('thinkingDefault')
+      }
+      if (totalReasoningDuration !== null) {
+        const seconds = Math.max(1, Math.ceil(totalReasoningDuration / 1000))
+        return tReasoning('thoughtFor', { seconds })
+      }
+      return tReasoning('thought')
+    }, [activeToolActions, isChainOfThoughtStreaming, totalReasoningDuration, tReasoning])
     // Convert task state to step status
     const getStepStatus = React.useCallback((state: TaskPart['state']) => {
       switch (state) {
@@ -1293,7 +1355,7 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
               onOpenChange={onChainOfThoughtOpenChange}
               defaultOpen={false}
             >
-              <ChainOfThoughtHeader title={tReasoning('thought')} />
+              <ChainOfThoughtHeader title={chainOfThoughtTitle} />
               <ChainOfThoughtContent>
                 {buildChainOfThoughtSteps()}
               </ChainOfThoughtContent>
@@ -1380,6 +1442,7 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
       allSources,
       buildChainOfThoughtSteps,
       cancelEdit,
+      chainOfThoughtTitle,
       chainOfThoughtOpen,
       conversationId,
       editDraft,
@@ -1406,7 +1469,6 @@ const MessageComponent = React.forwardRef<HTMLDivElement, MessageProps>(
       showPreservedErrorNote,
       streamErrorMessage,
       t,
-      tReasoning,
     ])
 
     const isAskUserOnlyMessage = isAssistant

@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 const window = new Window({ url: 'http://localhost' })
+const messageAttachmentProps: Array<Record<string, unknown>> = []
 Object.assign(globalThis, {
   window,
   document: window.document,
@@ -76,7 +77,10 @@ mock.module('@/components/ai-elements/message', () => ({
   Message: ({ children }: { children: React.ReactNode }) => <article>{children}</article>,
   MessageAction: ({ children, tooltip, ...props }: React.ComponentProps<'button'> & { tooltip: string }) => <button type="button" aria-label={tooltip} {...props}>{children}</button>,
   MessageActions: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  MessageAttachment: ({ data }: { data: { filename?: string } }) => <span>{data.filename}</span>,
+  MessageAttachment: (props: { data: { filename?: string }; onClick?: React.MouseEventHandler<HTMLButtonElement> }) => {
+    messageAttachmentProps.push(props as unknown as Record<string, unknown>)
+    return <button type="button" data-file-attachment={props.data.filename} onClick={props.onClick}>{props.data.filename}</button>
+  },
   MessageAttachments: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   MessageContent: ({ children }: { children: React.ReactNode }) => <section>{children}</section>,
 }))
@@ -207,6 +211,30 @@ describe('message rendering', () => {
     expect(html).toContain('brief.txt')
     expect(html).toContain('2/3')
     expect(html).toContain('chat.message.edit')
+  })
+  test('opens a document attachment through the chat preview callback', () => {
+    const onOpenCodePreview = mock(() => {})
+    const container = render(<Message
+      message={{
+        id: 'user-file-preview',
+        role: 'user',
+        parts: [{ type: 'file', filename: 'brief.docx', url: '/brief.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }],
+      }}
+      onOpenCodePreview={onOpenCodePreview}
+    />)
+
+    act(() => container.querySelector('[data-file-attachment="brief.docx"]')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })))
+
+    expect(onOpenCodePreview).toHaveBeenCalledWith({
+      id: 'file:/brief.docx',
+      kind: 'file',
+      file: {
+        type: 'file',
+        filename: 'brief.docx',
+        url: '/brief.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      },
+    })
   })
 
   test('hides duplicated error text while keeping the error boundary visible', () => {
@@ -551,7 +579,7 @@ describe('message behavior', () => {
     expect(thought).not.toBeNull()
     expect(thought?.querySelector('[data-chat-tool-node="true"]')).not.toBeNull()
     expect(thought?.textContent).toContain('Inspecting evidence')
-    expect(thought?.querySelector('h3')?.textContent).toBe('chat.reasoning.thought')
+    expect(thought?.querySelector('h3')?.textContent).toBe('chat.reasoning.actionCallingToolsParallel count=2')
     expect([...container.querySelectorAll('[data-step-status]')].map((item) => item.getAttribute('data-step-status'))).toEqual(['complete', 'active', 'active', 'active', 'error', 'pending', 'error'])
     expect(container.querySelector('[data-streaming="true"]')).not.toBeNull()
     expect([...container.querySelectorAll('[data-tool-state]')].map((item) => item.getAttribute('data-tool-state'))).toEqual(['input-available', 'output-error', 'input-streaming'])
@@ -568,19 +596,31 @@ describe('message behavior', () => {
         parts: [{ type: 'reasoning', text: 'Still thinking', state: 'streaming' }],
       }}
     />)
-    expect(thinking).toContain('chat.reasoning.thought')
+    expect(thinking).toContain('chat.reasoning.thinkingDefault')
     expect(thinking).not.toContain('chat.reasoning.thinkingActive')
-
     const executing = renderToStaticMarkup(<Message
       message={{
         id: 'executing-tool',
         role: 'assistant',
-        parts: [{ type: 'tool-call', toolCallId: 'executing', toolName: 'inspect', toolDisplayName: 'Inspect repository', input: {}, state: 'running' }],
+        parts: [
+          { type: 'reasoning', text: 'Searching', state: 'done' },
+          { type: 'tool-call', toolCallId: 't1', toolName: 'web_search', input: {}, state: 'running' },
+        ],
       }}
     />)
-    expect(executing).not.toContain('data-chat-thought-process="true"')
-    expect(executing).toContain('Inspect repository')
+    expect(executing).toContain('chat.reasoning.actionSearchingWeb')
 
+    const customTool = renderToStaticMarkup(<Message
+      message={{
+        id: 'thought-custom-query',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'Fetching', state: 'done' },
+          { type: 'tool-call', toolCallId: 'c1', toolName: 'fetch_user_orders', input: {}, state: 'running' },
+        ],
+      }}
+    />)
+    expect(customTool).toContain('chat.reasoning.actionQueryingTool tool=Fetch User Orders')
     const completed = renderToStaticMarkup(<Message
       message={{
         id: 'completed-tool',
@@ -618,8 +658,8 @@ describe('message behavior', () => {
         ],
       }}
     />)
-    expect(finalStep).toContain('chat.reasoning.thought')
     expect(finalStep).toContain('chat.reasoning.thoughtFor seconds=2')
+    expect(finalStep).not.toContain('chat.reasoning.thinkingDefault')
   })
 
 
@@ -709,7 +749,7 @@ describe('message behavior', () => {
     expect(tool?.className).not.toContain('mb-2')
     expect(thought?.textContent).toContain('Lookup')
     expect(thought?.textContent).not.toContain('Final answer')
-    expect(thought?.querySelector('h3')?.textContent).toBe('chat.reasoning.thought')
+    expect(thought?.querySelector('h3')?.textContent).toBe('chat.reasoning.thoughtFor seconds=1')
     expect(thought?.textContent).toContain('Lookup')
     expect(container.textContent).toContain('Final answer')
   })

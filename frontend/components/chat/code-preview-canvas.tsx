@@ -12,8 +12,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CodeBlock } from '@/components/ai-elements/code-block'
 import { SegmentItem } from './message-parts'
-import type { ArtifactPreviewPayload, ChatPreviewPayload, CodePreviewPayload, SourceDocumentPreviewPayload } from './types'
-import { getArtifactPreviewMode } from './artifact-utils'
+import type { ChatPreviewPayload, CodePreviewPayload, FilePreviewPayload, SourceDocumentPreviewPayload } from './types'
+import { FilePreviewPanel } from '@/components/file-preview'
 import type { BundledLanguage } from 'shiki'
 
 type MermaidTheme = NonNullable<MermaidConfig['theme']>
@@ -636,162 +636,41 @@ function MermaidPreview({ code }: { code: string }) {
   )
 }
 
-function ArtifactPreviewCanvas({
-  preview,
+function ChatFilePreviewCanvas({
+  file,
   onClose,
   isResizing,
 }: {
-  preview: ArtifactPreviewPayload
+  file: FilePreviewPayload['file']
   onClose: () => void
   isResizing?: boolean
 }) {
   const t = useTranslations('chat.message')
-  const file = preview.file
-  const mode = React.useMemo(() => getArtifactPreviewMode(file), [file])
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
-  const [textContent, setTextContent] = React.useState('')
-  const [isLoading, setIsLoading] = React.useState(mode !== 'unsupported')
-  const [loadFailed, setLoadFailed] = React.useState(false)
-
-  React.useEffect(() => {
-    let cancelled = false
-    let createdObjectUrl: string | null = null
-    setPreviewUrl(null)
-    setTextContent('')
-    setLoadFailed(false)
-
-    if (!file.url || mode === 'unsupported') {
-      if (!file.url) setLoadFailed(true)
-      setIsLoading(false)
-      return
-    }
-
-    let resolvedUrl: URL
-    try {
-      resolvedUrl = new URL(file.url, window.location.href)
-      if (resolvedUrl.origin !== window.location.origin) {
-        throw new Error('Artifact preview URL must be same-origin')
-      }
-    } catch {
-      setIsLoading(false)
-      setLoadFailed(true)
-      return
-    }
-
-    setIsLoading(true)
-    void fetch(resolvedUrl, { credentials: 'same-origin' })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Artifact preview failed with ${response.status}`)
-        }
-        if (mode === 'text' || mode === 'markdown' || mode === 'mermaid') {
-          const content = await response.text()
-          if (!cancelled) setTextContent(content)
-          return
-        }
-        createdObjectUrl = URL.createObjectURL(await response.blob())
-        if (cancelled) {
-          URL.revokeObjectURL(createdObjectUrl)
-          createdObjectUrl = null
-          return
-        }
-        setPreviewUrl(createdObjectUrl)
-      })
-      .catch(() => {
-        if (!cancelled) setLoadFailed(true)
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-      if (createdObjectUrl) URL.revokeObjectURL(createdObjectUrl)
-    }
-  }, [file.url, mode])
-
-  const handleDownload = React.useCallback(() => {
-    if (!file.url) return
-    const link = document.createElement('a')
-    link.href = file.url
-    link.download = file.filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }, [file.filename, file.url])
-
-  let body: React.ReactNode
-  if (isLoading) {
-    body = (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>{t('artifactPreviewLoading')}</span>
-      </div>
-    )
-  } else if (loadFailed || mode === 'unsupported') {
-    body = (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center text-muted-foreground">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-          <FileText className="h-6 w-6" />
-        </div>
-        <p className="max-w-sm text-sm">{t(loadFailed ? 'artifactPreviewLoadError' : 'artifactPreviewUnavailable')}</p>
-      </div>
-    )
-  } else if (mode === 'image' && previewUrl) {
-    body = <img src={previewUrl} alt={file.filename} className="h-full w-full object-contain p-6" />
-  } else if (mode === 'video' && previewUrl) {
-    body = <video src={previewUrl} controls playsInline className="h-full w-full bg-black object-contain" />
-  } else if (mode === 'audio' && previewUrl) {
-    body = <div className="flex h-full items-center justify-center p-8"><audio src={previewUrl} controls className="w-full max-w-xl" /></div>
-  } else if (mode === 'pdf' && previewUrl) {
-    body = <iframe title={file.filename} src={previewUrl} className="h-full w-full border-0 bg-white" />
-  } else if (mode === 'html' && previewUrl) {
-    body = isResizing ? <PreviewResizePlaceholder /> : <iframe title={file.filename} src={previewUrl} sandbox="allow-scripts" {...IFRAME_PROCESS_ISOLATION} className="h-full w-full border-0 bg-white" />
-  } else if (mode === 'markdown') {
-    body = <div className="h-full overflow-auto p-6"><Streamdown>{textContent}</Streamdown></div>
-  } else if (mode === 'mermaid') {
-    body = <MermaidPreview code={textContent} />
-  } else {
-    body = <pre className="h-full overflow-auto p-4 text-sm"><code>{textContent}</code></pre>
-  }
 
   return (
-    <div className="flex h-full min-w-0 flex-col bg-background">
-      <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{t('artifactPreviewCanvasTitle')}</div>
-          <div className="truncate text-xs text-muted-foreground">{file.filename}</div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger
-              onClick={handleDownload}
-              disabled={!file.url}
-              render={
-                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('mermaidDownloadLabel')}>
-                  <Download className="h-4 w-4" />
-                </Button>
-              }
-            />
-            <TooltipContent>{t('mermaidDownloadLabel')}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              onClick={onClose}
-              render={
-                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t('closeCodePreview')}>
-                  <X className="h-4 w-4" />
-                </Button>
-              }
-            />
-            <TooltipContent>{t('closeCodePreview')}</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
-    </div>
+    <FilePreviewPanel
+      file={file}
+      isResizing={isResizing}
+      onClose={onClose}
+      labels={{
+        title: t('artifactPreviewCanvasTitle'),
+        loading: t('artifactPreviewLoading'),
+        unavailable: t('artifactPreviewUnavailable'),
+        loadError: t('artifactPreviewLoadError'),
+        tooLarge: t('artifactPreviewTooLarge'),
+        download: t('mermaidDownloadLabel'),
+        close: t('closeCodePreview'),
+        sheet: t('filePreviewSheet'),
+        rowsLimited: ({ rows, columns }) => t('filePreviewRowsLimited', { rows, columns }),
+        parseError: t('filePreviewParseError'),
+        zoomIn: t('filePreviewZoomIn'),
+        zoomOut: t('filePreviewZoomOut'),
+        fitToView: t('filePreviewFitToView'),
+      }}
+    />
   )
 }
+
 
 function CodeContentPreviewCanvas({
   preview,
@@ -989,8 +868,8 @@ export function CodePreviewCanvas({
   onClose: () => void
   isResizing?: boolean
 }) {
-  if (preview.kind === 'artifact') {
-    return <ArtifactPreviewCanvas preview={preview} onClose={onClose} isResizing={isResizing} />
+  if (preview.kind === 'artifact' || preview.kind === 'file') {
+    return <ChatFilePreviewCanvas file={preview.file} onClose={onClose} isResizing={isResizing} />
   }
   if (preview.kind === 'source-document') {
     return <SourceDocumentPreviewCanvas preview={preview} onClose={onClose} />
