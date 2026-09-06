@@ -8,6 +8,7 @@ const api = {
   getDocument: mock(),
   previewChunks: mock(),
   processDocumentWithChunks: mock(),
+  getDocumentFile: mock(),
 }
 
 let state: unknown[] = []
@@ -45,6 +46,10 @@ mock.module('next-intl', () => ({
 }))
 mock.module('sonner', () => ({ toast }))
 mock.module('@/lib/api', () => ({ adminKnowledgeBasesApi: api }))
+mock.module('@/components/file-preview', () => ({
+  FilePreviewPanel: (props: Record<string, unknown>) => ({ type: 'file-preview-panel', props }),
+  getDocumentMimeType: () => 'text/plain',
+}))
 mock.module('@/lib/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }))
 
 const element = (tag: string) => ({ children, ...props }: { children?: ReactNode }) => ({
@@ -393,5 +398,19 @@ describe('DocumentsPreviewClient', () => {
     expect(push).not.toHaveBeenCalled()
     ;(remove.props.onKeyDown as (event: { key: string; stopPropagation(): void }) => void)({ key: 'Enter', stopPropagation() {} })
     expect(push).toHaveBeenCalledWith('/knowledge-bases/kb-1')
+  })
+
+  test('opens original preview and delegates to getDocumentFile', async () => {
+    api.getDocumentFile.mockResolvedValueOnce(new Blob(['original preview blob'], { type: 'text/plain' }))
+    let tree = await load()
+    const previewBtn = findAll(tree, (node) => node.props?.['aria-label'] === 'previewOriginal')[0]
+    expect(previewBtn).toBeDefined()
+    ;(previewBtn.props.onClick as () => void)()
+    tree = render()
+    const filePreview = findAll(tree, (node) => typeof node.props?.loadFile === 'function')[0]
+    expect(filePreview).toBeDefined()
+    await (filePreview.props.loadFile as () => Promise<Blob>)()
+    expect(api.getDocumentFile).toHaveBeenCalledWith('kb-1', 'doc-1')
+    ;(filePreview.props.onClose as () => void)()
   })
 })

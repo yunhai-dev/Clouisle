@@ -4,6 +4,7 @@ import type { ReactElement, ReactNode } from 'react'
 const api = Object.fromEntries([
   'getKnowledgeBase', 'getDocument', 'getDocumentChunks', 'processDocument', 'previewChunks',
   'retryFailedChunks', 'retryFailedChunk', 'deleteDocument', 'updateChunk', 'deleteChunk', 'createChunk',
+  'getDocumentFile',
 ].map(name => [name, mock()])) as Record<string, ReturnType<typeof mock>>
 const push = mock()
 const toastSuccess = mock()
@@ -432,6 +433,21 @@ describe('platform DocumentDetailClient', () => {
     expect(dialog(tree, 2).props.open).toBe(false)
     expect(find(tree, 'chunk-markdown').props.source).toBe('First chunk')
     expect(api.updateChunk).not.toHaveBeenCalled()
+  })
+
+  test('opens original preview and delegates to getDocumentFile', async () => {
+    api.getDocumentFile.mockResolvedValueOnce(new Blob(['original text content'], { type: 'text/plain' }))
+    let tree = await flush()
+    const previewBtn = elements(tree).find((item) => item.type === 'button' && item.props['aria-label'] === 'previewOriginal')
+    expect(previewBtn).toBeDefined()
+
+    previewBtn!.props.onClick()
+    tree = render()
+    const filePreview = elements(tree).find((item) => item.props && typeof item.props.loadFile === 'function')
+    expect(filePreview).toBeDefined()
+    await filePreview!.props.loadFile()
+    expect(api.getDocumentFile).toHaveBeenCalledWith('kb-1', 'doc-1')
+    filePreview!.props.onClose()
   })
 
 })
