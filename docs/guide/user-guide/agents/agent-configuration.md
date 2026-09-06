@@ -4,49 +4,72 @@ This guide covers how to configure AI agents in Clouisle.
 
 ## Overview
 
-Agent configuration includes:
+Clouisle provides a dedicated **Agent Studio** workspace (`/app/apps/{agent_id}`) featuring a two-column responsive interface:
+- **Left Column (Orchestration Editor)**: Collapsible cards for model selection, system prompt editing, dynamic variables, knowledge bases, tool bindings, chat behavior flags, and advanced runtime parameters.
+- **Right Column (Live Preview Panel)**: A persistent, fully functional chat sandbox that lets you immediately interact with and test your draft agent configuration without leaving the page or publishing changes.
+- **Top Toolbar**: Quick access to agent metadata (name, icon, status), publication controls (`Draft` vs `Published`), the Embed widget drawer, and the Agent Settings drawer.
 
-- **Basic settings**: Name, description, icon/avatar
-- **Model**: The team-authorized LLM model used for chat
-- **System prompt**: Define agent behavior
-- **Knowledge bases**: Attach knowledge sources with per-KB retrieval settings
-- **Tools**: Enable agent capabilities (builtin, custom, MCP, skills)
-- **RAG mode**: off / auto / agentic
-- **Chat behavior**: attachments, memory, image/video generation, variables
+---
 
-## Accessing Agent Configuration
+## Studio Interface & Layout
 
-### From Agent List
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ [🤖 Agent Name]  [Draft / Published]              [Embed] [Settings] [Publish Agent]   │
+├─────────────────────────────────────────┬──────────────────────────────────────────────┤
+│  ORCHESTRATION & CONFIGURATION (Left)   │  LIVE PREVIEW SANDBOX (Right)                │
+│                                         │                                              │
+│  ▼ Model Configuration                  │  ┌────────────────────────────────────────┐  │
+│    [Select Team Model...]               │  │ 🤖 Agent Preview       [Reset Session] │  │
+│                                         │  ├────────────────────────────────────────┤  │
+│  ▼ System Prompt                        │  │ Opening Message:                       │  │
+│    [ ✨ AI Generate Prompt ]            │  │ "Hello! How can I assist you today?"   │  │
+│    [ Prompt Textarea / {{variables}} ]  │  │                                        │  │
+│                                         │  │ [Suggested Question 1] [Question 2]    │  │
+│  ▼ Variables                            │  │                                        │  │
+│    [ + Add Variable (Text/Select/...) ] │  │ User: Test query...                    │  │
+│                                         │  │ Agent: (Streaming response with tools) │  │
+│  ▼ Knowledge Bases (RAG)                │  ├────────────────────────────────────────┤  │
+│    [ + Add Knowledge Base ]             │  │ [📎] Type a test message...     [Send] │  │
+│                                         │  └────────────────────────────────────────┘  │
+│  ▼ Tools & Capabilities                 │                                              │
+│    [ Builtin / Custom / MCP / Skill ]   │                                              │
+│                                         │                                              │
+│  ▼ Chat Behavior & Advanced Settings    │                                              │
+└─────────────────────────────────────────┴──────────────────────────────────────────────┘
+```
 
-1. Navigate to **Agents**
-2. Click on agent to configure
-3. Click **Settings** or **Edit** button
-4. Modify configuration
-5. Click **Save Changes**
+### Accessing Agent Configuration
 
-## Basic Information
+1. Navigate to **Apps** (`/app/apps`) from the main navigation bar.
+2. Click on the **Agent** tab and choose the agent you want to edit.
+3. The Agent Studio opens at `/app/apps/{agent_id}`.
+4. All edits update your agent's **draft** configuration. Click **Publish Agent** on the top toolbar when ready to make changes live to team members.
 
-### Agent Details
+---
 
-**Configure basic information:**
+## Basic Information & Settings Drawer
+
+Click the **Settings** icon on the top toolbar to open the `AgentSettingsDrawer`:
 
 ```yaml
 Name: Customer Support Agent
-Description: Handles customer inquiries and support tickets
-Icon: 🤖
-Team: Support Team
+Description: Handles customer inquiries, technical troubleshooting, and ticket creation
+Icon: 🤖 (Emoji or custom Image URL)
+Visibility: team
 ```
 
 **Fields:**
-- **Name**: Display name (max 100 chars, required)
-- **Description**: Agent purpose (max 500 chars)
-- **Icon**: Emoji or image URL (max 500 chars)
-- **Avatar URL**: Optional avatar image URL
-- **Team**: Team ownership (set at creation)
-
-**Status:** An agent is `draft` until you publish it. Only published agents are available to chat with.
-
-**Visibility:** `private` (only you) or `team` (all team members). There is no public visibility.
+- **Name**: Display name (max 100 characters, required).
+- **Description**: Summary of the agent's purpose and scope (max 500 characters).
+- **Icon / Avatar**: Emoji character or external image URL.
+- **Team**: Team ownership (assigned at creation; team is the sole organizational boundary).
+- **Visibility**:
+  - `private`: Visible and usable only by the creator.
+  - `team`: Visible and usable by all team members.
+- **Lifecycle Status**:
+  - `draft`: Work-in-progress state. Edits can be previewed live in the right panel without affecting team users.
+  - `published`: Production-ready state. Only published agents can be accessed via the standard Chat view or Embed widgets.
 
 ## Model Selection
 
@@ -66,56 +89,81 @@ Model: <team-authorized model>
 - **Speed**: Faster models for real-time chat
 - **Context**: Longer context for complex tasks
 
-## System Prompt
+## System Prompt & AI Assistant
 
-### Define Agent Behavior
+### Defining Agent Persona and Logic
 
-**System Prompt Structure:**
+The system prompt sets the foundational instructions, personality, operational constraints, and tool invocation rules.
 
-```
-You are a [role] that [purpose].
+**Standard Structure:**
 
-Your responsibilities:
-- [Responsibility 1]
-- [Responsibility 2]
-
-Guidelines:
-- [Guideline 1]
-- [Guideline 2]
-
-Tone: [Professional/Friendly/Casual]
-```
-
-**Example - Customer Support Agent:**
-
-```
-You are a helpful customer support agent for Clouisle, an AI platform.
+```markdown
+You are a [Role] specialized in [Domain].
 
 Your responsibilities:
-- Answer customer questions about features and usage
-- Help troubleshoot technical issues
-- Guide users through common tasks
+1. [Primary duty]
+2. [Secondary duty]
 
-Guidelines:
-- Always be polite and professional
-- Use the knowledge base to provide accurate information
-- If you don't know something, admit it and offer to escalate
+Operational Guidelines:
+- Always verify facts against attached knowledge bases before answering.
+- Ask clarifying questions when user requirements are ambiguous.
+- Structure outputs with Markdown headings and concise bullet points.
 
-Tone: Friendly and professional
+Tone: Professional, friendly, and structured.
 ```
 
-### Dynamic Variables
+### ✨ AI Prompt Generator
 
-**Use variables in the system prompt:**
+Clouisle includes an integrated AI Prompt Optimizer to help you craft high-performance prompts:
 
+1. Click the **✨ AI Generate / Optimize** button at the top-right of the Prompt Editor.
+2. Enter your agent's core intent in plain language (e.g., *"An IT helpdesk assistant that diagnoses network issues and searches our internal runbooks"*).
+3. Provide optional context, constraints, and target output style.
+4. Click **Generate**. The AI synthesizes a structured, production-ready system prompt including roles, constraints, tool instructions, and variable placeholders.
+5. Click **Apply** to load the generated text directly into your editor.
+
+### Dynamic Variables & Placeholders
+
+System prompts support dynamic variable interpolation using double curly braces:
+
+```markdown
+You are an automated support engineer for {{company_name}}.
+Your current customer tier is {{user_tier}}.
+
+Answer the user inquiry: {{query}}
 ```
-You are a customer support agent for {{company_name}}.
 
-Respond to the user's request: {{query}}
-```
+**Variable Types and Resolution:**
+- **`{{query}}`**: Automatically bound to the current incoming user message.
+- **Custom Variables**: Defined in the **Variables** configuration section. When configured:
+  - The prompt editor highlights matched `{{variable_name}}` tokens.
+  - During preview or live chat, a **Variable Input Bar / Drawer** prompts the user to supply values before starting the conversation.
 
-**Available variables:** Custom variables defined in the agent's **Variables** section (text, paragraph, select, number, checkbox types), plus `{{query}}` for the current chat request. Only values supplied for those variables are substituted; Clouisle does not inject built-in user, team, date, or time variables.
+---
 
+## Dynamic Variables Editor
+
+Dynamic variables allow agents to adapt to custom parameters supplied at conversation start.
+
+### Supported Variable Types
+
+| Type | Description | Input Widget |
+|------|-------------|--------------|
+| **Text** | Single-line short string | Text input box |
+| **Paragraph** | Multi-line text block | Textarea |
+| **Select** | Predefined single-choice list | Dropdown selector with configurable options |
+| **Number** | Numeric value (integers/floats) | Number input field with optional min/max validation |
+| **Checkbox** | Boolean true/false flag | Toggle switch or checkbox |
+| **Secret** | Sensitive credentials or tokens | Masked input field (`password` type) |
+
+### Variable Configuration Options
+
+- **Key**: Variable name referenced in the prompt (e.g., `company_name`, alphanumeric + underscores).
+- **Display Name**: User-friendly label shown in the input drawer.
+- **Description / Tooltip**: Helpful hints for the user entering the value.
+- **Required**: If enabled, users must fill this variable before sending the first message.
+- **Default Value**: Initial pre-filled value.
+- **Hidden**: Hides the variable from regular conversation drawers (useful when values are passed programmatically via API or Embed URL parameters).
 ## Chat Behavior Settings
 
 The following toggles control the chat experience:
@@ -213,15 +261,48 @@ Configure an optional opening message and suggested questions shown when a new c
 `embed_config` controls the embeddable widget for this agent (enabled, allowed domains, theme, bubble).
 
 ## Testing Configuration
+## Testing with the Live Preview Panel
 
-### Test Agent
+The right-hand column houses the **AgentPreviewPanel**, giving you an instant interactive feedback loop:
 
-1. Click **Test Agent** (this runs the workflow debug flow or a test chat)
-2. Send a disposable test message
-3. Review the response, source citations, and tool usage
-4. Adjust configuration if needed
+```
+┌────────────────────────────────────────────────────────┐
+│ 🤖 Customer Support Agent           [🔄 Reset Session] │
+├────────────────────────────────────────────────────────┤
+│ [📋 Variables: company_name = "Acme", tier = "Gold"]   │
+├────────────────────────────────────────────────────────┤
+│ 👋 Hi! Welcome to Acme Support. How can I help?        │
+│                                                        │
+│ [How do I reset my password?]  [Check service status]  │
+├────────────────────────────────────────────────────────┤
+│ 👤 User: How do I reset my password?                   │
+│                                                        │
+│ 🤖 Agent:                                              │
+│ 💭 Thinking (Searching KB: support_manual)...          │
+│ To reset your password, please follow these steps...   │
+├────────────────────────────────────────────────────────┤
+│ [📎] Type a test message...                     [Send] │
+└────────────────────────────────────────────────────────┘
+```
 
-## Best Practices
+### Key Preview Features
+
+1. **Instant Draft Execution**: Messages sent in the preview panel run against your current unsaved/draft configuration (prompt, model, tools, RAG settings) without requiring you to publish.
+2. **🔄 Reset Session Button**: Click the reset icon in the top-right corner of the panel to clear the conversation history and start a fresh test run. Always reset after major prompt or tool modifications to ensure clean context.
+3. **Variable Testing Drawer**: If you have defined custom variables, the preview panel displays a collapsible variable drawer at the top. You can modify variable values on the fly and verify prompt interpolation immediately.
+4. **Tool and CoT Inspection**: Watch reasoning/Chain of Thought unfold in real time. Hover over tool call badges to inspect tool inputs and outputs.
+5. **Ask User Interactive Testing**: If `Enable interactive questions` is enabled, verify how question prompts, choice chips, custom answers, and skips behave directly in the preview composer.
+6. **Opening Message & Suggested Questions Preview**: Test whether your opening greeting and suggestion chips render and trigger correctly.
+
+---
+
+## Publishing & Sharing
+
+Once satisfied with the preview results:
+
+1. Click **Publish Agent** on the top toolbar.
+2. The agent becomes active for your team in the **Apps** gallery and accessible via direct chat (`/chat/{agent_id}`) and run views (`/run/{agent_id}`).
+3. Click the **Embed** button on the toolbar to configure and obtain code snippets for iframe or floating chat widget embedding on external websites. (See [Embed and Share](./embed-and-share.md) for full instructions).
 
 **✅ Do:**
 - Test configuration thoroughly

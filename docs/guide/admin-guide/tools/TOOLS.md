@@ -266,7 +266,7 @@ return hash;
 
 ### Via Web UI
 
-1. Navigate to **Tools** page in your team workspace
+1. Navigate to the **Tools** page in your team
 2. Click **Create Tool**
 3. Choose tool type:
    - **HTTP Tool**: Configure API endpoint and request format

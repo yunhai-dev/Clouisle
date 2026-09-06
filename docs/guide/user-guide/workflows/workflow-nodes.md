@@ -254,6 +254,14 @@ Input Variables:
     required: true
 ```
 
+## Canvas Annotation Nodes
+
+### comment
+
+Visual sticky notes and documentation blocks placed directly on the workflow canvas to describe logic sections, architecture boundaries, or maintenance notes.
+
+> **Note:** `comment` nodes are canvas-only presentation elements. They are non-executable and automatically excluded from runtime execution plans (`NON_EXECUTABLE_NODE_TYPES`).
+
 ## Node Properties
 
 ### Common Properties

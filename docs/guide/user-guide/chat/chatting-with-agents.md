@@ -100,40 +100,69 @@ Agents stream responses in real-time:
 - You can read while the agent is still typing
 - Stop generation by clicking the **Stop** button
 
-### Response Components
+### Response Anatomy & Visual Elements
 
-**Text Response:**
-```
-The main answer to your question appears here.
-It can include:
-- Formatted text (bold, italic)
-- Lists and bullet points
-- Code blocks
-- Links
-```
+Clouisle delivers a rich, structured assistant message structure:
 
-**Source Citations (RAG):**
 ```
-📚 Sources:
-- document1.pdf (Page 5)
-- guide.md (Section 3)
-```
-
-**Tool Usage:**
-```
-🔧 Using tool: web_search
-Searching for: "latest AI trends"
-Found 5 results...
-```
-
-**Thinking Process (if enabled):**
-```
-💭 Thinking...
-Analyzing the question...
-Retrieving relevant documents...
-Formulating response...
+┌────────────────────────────────────────────────────────┐
+│ 💭 思考了 3 秒 (Thought for 3s)                 [▲/▼] │
+│  ├── 正在读取文件: report.pdf... (Tool Action)         │
+│  └── 分析检索到的要点并组织输出结构...                   │
+├────────────────────────────────────────────────────────┤
+│ 📚 检索来源 (Sources):                                 │
+│  [📄 report.pdf (Chunk 2, 89%)] [📄 manual.md]        │
+├────────────────────────────────────────────────────────┤
+│                                                        │
+│ Here is the quarterly summary based on your document: │
+│                                                        │
+│ 1. Revenue grew by 24% year-over-year.                 │
+│ 2. Customer satisfaction score reached 96%.            │
+│                                                        │
+├────────────────────────────────────────────────────────┤
+│ 📦 生成产物 (Artifacts):                               │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ 📊 quarterly_summary.xlsx    [预览]   [⬇️ 下载]  │  │
+│  └──────────────────────────────────────────────────┘  │
+├────────────────────────────────────────────────────────┤
+│ [🔄 重新生成] [📋 复制] [‹ 2/3 ›]   ⏱️ 1.2s  ⚡ 42 t/s  │
+└────────────────────────────────────────────────────────┘
 ```
 
+#### 1. Chain of Thought (CoT) & Dynamic Tool Perception
+
+The reasoning header dynamically reflects the model's high-level execution state in real time:
+- **Pure Reasoning**: While the model streams reasoning tokens with no active tools, the header displays an animated shimmer with `思考中...` (`Thinking...`).
+- **Single Active Tool**: The header semantically classifies the active tool call and displays intuitive action phrases (e.g., `正在读取文件...`, `正在运行代码...`, `正在查询：{name}...`, `正在请求接口：{endpoint}...`).
+- **Parallel Tool Execution**: When multiple tools execute concurrently, the header aggregates them as `正在并行调用 {count} 个工具...` (`Calling {count} tools in parallel...`).
+- **Completed State**: Once the agent finishes generating, the header shows the total reasoning duration (e.g., `思考了 4 秒` / `Thought for 4s`) and can be collapsed or expanded at any time.
+
+#### 2. Interactive Human-in-the-Loop (`AskUserForm`)
+
+When an agent needs human input or clarification before proceeding, it invokes the built-in `ask_user` tool:
+- **Composer-Level Form**: The interactive question form appears directly above the input box (rather than being buried in the message stream).
+- **Flexible Answers**:
+  - **Option Chips**: Click predefined suggestion chips.
+  - **Custom Text**: Type a custom text response beneath the options.
+  - **Multi-Question Pagination**: Page through multiple structured questions.
+  - **Skip Action**: Click **Skip All** (`跳过全部`) to bypass the prompt and allow the agent to make default assumptions.
+- **Durable Execution**: Submitting the answer seamlessly resumes the active server run without resetting conversation history.
+
+#### 3. Generated Artifacts & File Preview (`ArtifactFileList`)
+
+When an agent or sandbox code execution generates output files (spreadsheets, charts, reports, images, code snippets):
+- **Artifact List**: Rendered cleanly at the bottom of the assistant message after generation completes (avoiding streaming layout shift).
+- **Interactive Previews**:
+  - **Images**: Click to open the full-screen `ImageLightbox` zoom and inspect view.
+  - **Documents**: Built-in online preview for PDF, DOCX, XLSX/CSV, and Markdown files.
+  - **Code & Diagrams**: Visual code preview canvas and Mermaid chart renderer.
+  - **Direct Download**: One-click download button for every generated asset.
+
+#### 4. Source Citations (RAG)
+
+When knowledge base retrieval is active:
+- Sources are listed with document titles, chunk indexes, and similarity match percentages.
+- Click any source badge to inspect the exact retrieved text segment in a popover.
 ### Response Quality
 
 **High-quality responses include:**
@@ -202,54 +231,33 @@ Agent: To install Clouisle, follow these steps...
 
 Long conversations are automatically compressed to fit the model's context window.
 
-## Advanced Features
+## Advanced Features & Multi-Version Branching
 
-### Message Regeneration
+### Message Regeneration & Version Navigation
 
-If you're not satisfied with a response:
+If you want a different answer from the agent:
 
-1. Hover over the agent's message
-2. Click the **🔄 Regenerate** button
-3. The agent generates a new response
-4. The previous response is saved as a version (you can switch between versions)
+1. Hover over the assistant's response.
+2. Click the **🔄 Regenerate** button on the message action toolbar.
+3. The agent streams a new response while preserving the previous output as a historical version.
+4. Use the version paginator (`‹ 1/2 ›`) below the message to toggle between versions.
 
-### Message Editing
+### Message Editing & Conversation Branching
 
-Edit your sent messages:
+You can edit any user message previously sent:
 
-1. Hover over your message
-2. Click the **✏️ Edit** button
-3. Modify your message
-4. Press **Enter** to resend
-5. The conversation branches from this point
+1. Hover over your message and click the **✏️ Edit** button.
+2. Modify the text in the inline editor.
+3. Click **Resend** or press **Enter**.
+4. The conversation branches from that point onward, creating a new revision timeline while retaining earlier conversation branches.
 
-### Message Branching
+### Copy & Speed Metrics
 
-Conversations can have multiple branches:
-
-```
-Main conversation:
-You: Tell me about AI
-Agent: AI is...
-
-Branch 1 (edit message):
-You: Tell me about ML
-Agent: ML is...
-
-Branch 2 (regenerate):
-Agent: AI, or Artificial Intelligence...
-```
-
-Navigate branches using the arrow buttons.
-
-### Copy Message
-
-1. Hover over a message
-2. Click the **📋 Copy** button
-3. The message is copied to the clipboard
+Each message action bar provides:
+- **📋 Copy Message**: Copies the raw Markdown text to your clipboard.
+- **Message Performance Stats**: Shows total generation latency, time-to-first-token, and tokens per second (t/s) (can be toggled off via agent settings).
 
 > **Note:** Conversation sharing and export are **not implemented**.
-
 ## Best Practices
 
 ### Writing Effective Prompts
