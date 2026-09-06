@@ -107,10 +107,15 @@ def create_embedding_model(model_config: Model | ModelConfig) -> Embeddings:
             ModelProvider.OLLAMA: "http://localhost:11434/v1",
         }
         # 获取 provider 的 base_url
-        provider_enum = (
-            ModelProvider(provider) if isinstance(provider, str) else provider
+        try:
+            provider_enum = (
+                ModelProvider(provider) if isinstance(provider, str) else provider
+            )
+        except ValueError:
+            provider_enum = None
+        final_base_url = base_url or (
+            provider_base_urls.get(provider_enum) if provider_enum else None
         )
-        final_base_url = base_url or provider_base_urls.get(provider_enum)
 
         # 禁用 tokenization，因为某些 API 不支持 tokenized 输入
         # check_embedding_ctx_length=False 防止 LangChain 对输入进行 tokenize

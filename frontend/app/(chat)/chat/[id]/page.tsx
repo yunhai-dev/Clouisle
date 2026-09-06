@@ -55,7 +55,7 @@ import {
   type ChatInputFile,
   type ChatPreviewPayload,
 } from '@/components/chat'
-import { getStoredRunSnapshot, useChat, type ChatImageContent } from '@/hooks/use-chat'
+import { getStoredRunSnapshot, removeRunSnapshot, useChat, type ChatImageContent } from '@/hooks/use-chat'
 import { defaultChatAdapter, type ChatPageAdapter } from '@/lib/chat/chat-adapter'
 import {Alert, AlertDescription, AlertTitle} from "@/components/ui/alert";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -354,12 +354,15 @@ export default function PublicChatPage({
         if (!snapshot) return null
         try {
           const status = await getRunStatus(resolvedParams.id, snapshot.runId)
-          return status.status === 'queued'
+          const isActive = status.status === 'queued'
             || status.status === 'running'
             || status.status === 'stopping'
             || status.status === 'completing'
-            ? conversation.id
-            : null
+          const isWaiting = status.status === 'waiting'
+          if (!isActive && !isWaiting && conversation.id !== conversationId) {
+            removeRunSnapshot(resolvedParams.id, conversation.id)
+          }
+          return isActive ? conversation.id : null
         } catch {
           return null
         }
@@ -389,7 +392,7 @@ export default function PublicChatPage({
       cancelled = true
       globalThis.clearInterval(interval)
     }
-  }, [adapter, conversations, embedMode, resolvedParams])
+  }, [adapter, conversationId, conversations, embedMode, resolvedParams])
 
   // Load conversation from URL parameter
   React.useEffect(() => {

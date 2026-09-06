@@ -1153,6 +1153,8 @@ async def _embed_existing_document_chunks(
                     kb_id, batch
                 )
                 embedded_count += len(embedded_batch)
+            except DimensionMismatchError:
+                raise
             except Exception as batch_exc:
                 logger.warning(
                     "Batch embed failed for document %s, falling back to per-chunk: %s",
@@ -1166,6 +1168,8 @@ async def _embed_existing_document_chunks(
                         chunk.error_message = cast(Any, None)
                         await chunk.save(update_fields=["status", "error_message"])
                         embedded_count += 1
+                    except DimensionMismatchError:
+                        raise
                     except Exception as e:
                         failed_count += 1
                         last_error = _get_embedding_error(document, e, user_locale)
@@ -1293,6 +1297,27 @@ async def _embed_existing_document_chunks(
             "total_chunks": len(chunks),
         }
 
+    except DimensionMismatchError as e:
+        logger.error(f"Dimension mismatch for document {document_id}: {e}")
+        document.status = DocumentStatus.ERROR.value
+        _clear_task_metadata(document)
+        document.error_message = _get_dimension_mismatch_error(document, user_locale)[
+            :500
+        ]
+        await document.save()
+        await _send_doc_failed_notification(
+            document=document,
+            kb_name=kb.name,
+            team_id=kb_team_id,
+            error=document.error_message,
+            user_locale=user_locale,
+        )
+        return {
+            "status": "error",
+            "document_id": document_id,
+            "message": document.error_message,
+            "error_type": "dimension_mismatch",
+        }
     except Exception as e:
         logger.exception(f"Error embedding document {document_id}: {e}")
 
@@ -1432,6 +1457,8 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
                         kb.id, batch
                     )
                     embedded_count += len(embedded_batch)
+                except DimensionMismatchError:
+                    raise
                 except Exception as batch_exc:
                     logger.warning(
                         "Batch retry failed for document %s, falling back to per-chunk: %s",
@@ -1445,6 +1472,8 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
                             chunk.error_message = None
                             await chunk.save(update_fields=["status", "error_message"])
                             embedded_count += 1
+                        except DimensionMismatchError:
+                            raise
                         except Exception as e:
                             still_failed += 1
                             last_error = _get_embedding_error(document, e, user_locale)
@@ -1525,6 +1554,29 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
                 "total_chunks": total_chunks,
             }
 
+        except DimensionMismatchError as e:
+            logger.error(
+                f"Dimension mismatch retrying failed chunks for document {document_id}: {e}"
+            )
+            document.status = DocumentStatus.ERROR.value
+            _clear_task_metadata(document)
+            document.error_message = _get_dimension_mismatch_error(
+                document, user_locale
+            )[:500]
+            await document.save()
+            await _send_doc_failed_notification(
+                document=document,
+                kb_name=kb.name,
+                team_id=kb.team_id,
+                error=document.error_message,
+                user_locale=user_locale,
+            )
+            return {
+                "status": "error",
+                "document_id": document_id,
+                "message": document.error_message,
+                "error_type": "dimension_mismatch",
+            }
         except Exception as e:
             logger.exception(
                 f"Error retrying failed chunks for document {document_id}: {e}"

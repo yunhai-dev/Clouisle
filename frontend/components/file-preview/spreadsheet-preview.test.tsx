@@ -42,6 +42,7 @@ test('renders workbook sheets and keeps visible table columns aligned', async ()
     <SpreadsheetPreview
       blob={new Blob([bytes])}
       labels={{
+        loading: 'Loading spreadsheet...',
         sheet: 'Sheet',
         rowsLimited: () => 'limited',
         parseError: 'parse error',
@@ -49,10 +50,15 @@ test('renders workbook sheets and keeps visible table columns aligned', async ()
     />
   )
 
-  await act(async () => {
-    await Bun.sleep(10)
-  })
-
+  const start = Date.now()
+  while (!container.textContent?.includes('Alice')) {
+    if (Date.now() - start > 3000) {
+      throw new Error('Timed out waiting for workbook to render')
+    }
+    await act(async () => {
+      await Bun.sleep(10)
+    })
+  }
   expect(container.textContent).toContain('Summary')
   expect(container.textContent).toContain('Alice')
   expect(container.querySelectorAll('thead th')).toHaveLength(3)

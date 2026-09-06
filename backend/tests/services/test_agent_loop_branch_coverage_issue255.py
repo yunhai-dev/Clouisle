@@ -195,6 +195,16 @@ async def test_agent_loop_error_capture_and_empty_iteration(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_agent_loop_rejects_context_without_bounds():
+    loop = AgentLoop(_context(max_iterations=None, deadline_seconds=None))
+    with pytest.raises(
+        ValueError,
+        match="AgentLoopContext must specify at least one bound: max_iterations or deadline_seconds",
+    ):
+        await _consume_loop(loop)
+
+
+@pytest.mark.asyncio
 async def test_agent_loop_guards_heartbeat_inputs_and_plans():
     events: list[str] = []
 

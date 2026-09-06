@@ -72,7 +72,7 @@ function MermaidFilePreview({ code }: { code: string }) {
     void mermaidModulePromise
       .then((mod) => {
         const mermaid = mod.default
-        mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' })
+        mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'strict' })
         return mermaid.render(`mermaid_${id}`, code)
       })
       .then(({ svg: renderedSvg }) => {
@@ -316,6 +316,7 @@ export function FilePreviewPanel({
         }
 
         const loadedBlob = await response.blob()
+        if (!cancelled) setBlob(loadedBlob)
         await applyBlob(loadedBlob)
       }
       if (!cancelled && mode !== 'unsupported') setStatus('ready')
@@ -394,6 +395,7 @@ export function FilePreviewPanel({
       <SpreadsheetPreview
         blob={blob}
         labels={{
+          loading: resolvedLabels.loading,
           sheet: resolvedLabels.sheet,
           rowsLimited: resolvedLabels.rowsLimited,
           parseError: resolvedLabels.parseError,

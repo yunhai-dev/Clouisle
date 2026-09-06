@@ -921,35 +921,35 @@ export function DocumentDetailClient({ knowledgeBaseId, documentId }: DocumentDe
               )}
             </>
           )}
+          {isOriginalPreviewOpen && (
+            <div className="absolute inset-0 z-10 bg-background">
+              <FilePreviewPanel
+                file={{
+                  filename: document.name,
+                  mimeType: getDocumentMimeType(document.name, document.doc_type),
+                  size: document.file_size,
+                }}
+                loadFile={loadOriginalFile}
+                onClose={() => setIsOriginalPreviewOpen(false)}
+                labels={{
+                  title: t('previewOriginalTitle'),
+                  loading: t('previewOriginalLoading'),
+                  unavailable: t('previewOriginalUnavailable'),
+                  loadError: t('previewOriginalLoadError'),
+                  tooLarge: t('previewOriginalTooLarge'),
+                  download: t('downloadOriginal'),
+                  close: t('previewOriginalClose'),
+                  sheet: t('previewOriginalSheet'),
+                  rowsLimited: ({ rows, columns }) => t('previewOriginalRowsLimited', { rows, columns }),
+                  parseError: t('previewOriginalParseError'),
+                  zoomIn: t('previewOriginalZoomIn'),
+                  zoomOut: t('previewOriginalZoomOut'),
+                  fitToView: t('previewOriginalFitToView'),
+                }}
+              />
+            </div>
+          )}
         </div>
-        {isOriginalPreviewOpen && (
-          <div className="absolute inset-0 z-10 bg-background">
-            <FilePreviewPanel
-              file={{
-                filename: document.name,
-                mimeType: getDocumentMimeType(document.name, document.doc_type),
-                size: document.file_size,
-              }}
-              loadFile={loadOriginalFile}
-              onClose={() => setIsOriginalPreviewOpen(false)}
-              labels={{
-                title: t('previewOriginalTitle'),
-                loading: t('previewOriginalLoading'),
-                unavailable: t('previewOriginalUnavailable'),
-                loadError: t('previewOriginalLoadError'),
-                tooLarge: t('previewOriginalTooLarge'),
-                download: t('downloadOriginal'),
-                close: t('previewOriginalClose'),
-                sheet: t('previewOriginalSheet'),
-                rowsLimited: ({ rows, columns }) => t('previewOriginalRowsLimited', { rows, columns }),
-                parseError: t('previewOriginalParseError'),
-                zoomIn: t('previewOriginalZoomIn'),
-                zoomOut: t('previewOriginalZoomOut'),
-                fitToView: t('previewOriginalFitToView'),
-              }}
-            />
-          </div>
-        )}
       </div>
 
       {/* 右侧：设置面板 */}

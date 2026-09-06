@@ -1763,7 +1763,7 @@ function saveRunSnapshot(agentId: string, conversationId: string, snapshot: Stor
   }
 }
 
-function removeRunSnapshot(agentId: string, conversationId: string) {
+export function removeRunSnapshot(agentId: string, conversationId: string) {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.removeItem(runStorageKey(agentId, conversationId))

@@ -3,6 +3,7 @@
 import * as React from 'react'
 
 interface SpreadsheetPreviewLabels {
+  loading: string
   sheet: string
   rowsLimited: (values: { rows: number; columns: number }) => string
   parseError: string
@@ -111,7 +112,7 @@ export function SpreadsheetPreview({ blob, labels }: SpreadsheetPreviewProps) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
         <span aria-hidden="true" className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-        <span>Loading spreadsheet...</span>
+        <span>{labels.loading}</span>
       </div>
     )
   }

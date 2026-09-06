@@ -60,7 +60,7 @@
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.6.0",
     "use-stick-to-bottom": "^1.1.6",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",

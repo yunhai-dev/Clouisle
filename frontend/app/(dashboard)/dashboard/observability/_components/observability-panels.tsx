@@ -609,7 +609,7 @@ export function WorkersPanel({ workers }: { workers: WorkerResponse | null }) {
           <CardContent>
             <DistributionBarList
               items={pendingTasks}
-              total={Math.max(pendingTotal, 1)}
+              total={Math.max(...pendingTasks.map((task) => task.value), 1)}
               valueLabel={t('health.pending')}
             />
           </CardContent>

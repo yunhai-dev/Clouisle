@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogFooter,
   DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog'
 
 const KIND_ICON: Record<NotificationDisplayKind, React.ComponentType<{ className?: string }>> = {
@@ -117,7 +118,7 @@ export function ProminentNotificationDialog() {
         </DialogHeader>
 
         <div className="min-w-0 flex-1 overflow-x-auto overflow-y-auto -mx-6 px-6 space-y-2">
-          <p className="font-medium">{selectedItem.title}</p>
+          <DialogTitle className="font-medium text-base">{selectedItem.title}</DialogTitle>
           {/* Approval notifications carry a snapshot summary; the live pause
               request replaces it to avoid showing the content twice. */}
           {!selectedPauseMeta && (

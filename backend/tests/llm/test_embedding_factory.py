@@ -124,3 +124,18 @@ def test_unsupported_provider_raises_error():
     )
     with pytest.raises(ValueError, match="Unsupported provider for embedding"):
         create_embedding_model(model)
+
+
+def test_unknown_provider_with_base_url_supported():
+    model = SimpleNamespace(
+        provider="internal_gateway",
+        model_id="custom-embed",
+        api_key=None,
+        base_url="https://gateway.internal/v1",
+        config={},
+    )
+    with patch("langchain_openai.OpenAIEmbeddings") as embeddings:
+        create_embedding_model(model)
+
+    assert embeddings.call_args.kwargs["base_url"] == "https://gateway.internal/v1"
+    assert embeddings.call_args.kwargs["model"] == "custom-embed"

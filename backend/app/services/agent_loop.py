@@ -609,6 +609,11 @@ class AgentLoop:
         full_content = ""
         full_reasoning = ""
 
+        if ctx.max_iterations is None and ctx.deadline_seconds is None:
+            raise ValueError(
+                "AgentLoopContext must specify at least one bound: max_iterations or deadline_seconds"
+            )
+
         iteration = ctx.iteration_offset
         while True:
             if ctx.max_iterations is not None and iteration >= ctx.max_iterations:
