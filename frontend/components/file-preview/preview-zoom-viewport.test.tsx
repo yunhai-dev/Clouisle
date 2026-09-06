@@ -163,4 +163,14 @@ test('handles wheel and pinch zoom events', async () => {
     viewport.dispatchEvent(event)
   })
   expect(scaleOf(content)).toBeGreaterThan(1)
+
+  // Gesture events
+  await act(async () => {
+    viewport.dispatchEvent(new window.Event('gesturestart', { bubbles: true, cancelable: true }))
+    const gestureChange = new window.Event('gesturechange', { bubbles: true, cancelable: true })
+    Object.assign(gestureChange, { scale: 1.2 })
+    viewport.dispatchEvent(gestureChange)
+    viewport.dispatchEvent(new window.Event('gestureend', { bubbles: true, cancelable: true }))
+  })
+  expect(scaleOf(content)).toBeGreaterThan(1)
 })

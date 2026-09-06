@@ -114,6 +114,27 @@ test('renders mermaid diagrams with interactive controls and strict security lev
   await flush()
   expect(container.querySelector('div')).toBeTruthy()
   expect(loadFile).toHaveBeenCalledTimes(1)
+
+  // Exercise buttons in MermaidFilePreview
+  const buttons = container.querySelectorAll('button')
+  if (buttons.length >= 3) {
+    act(() => buttons[0].click()) // Reset/Expand
+    act(() => buttons[1].click()) // ZoomOut
+    act(() => buttons[2].click()) // ZoomIn
+  }
+
+  // Exercise pointer interactions
+  const dragArea = container.querySelector('.cursor-grab') as HTMLElement | null
+  if (dragArea) {
+    dragArea.setPointerCapture = () => {}
+    dragArea.releasePointerCapture = () => {}
+    act(() => {
+      dragArea.dispatchEvent(new window.Event('pointerdown', { bubbles: true }))
+      dragArea.dispatchEvent(new window.Event('pointermove', { bubbles: true }))
+      dragArea.dispatchEvent(new window.Event('pointerup', { bubbles: true }))
+      dragArea.dispatchEvent(new window.Event('pointercancel', { bubbles: true }))
+    })
+  }
 })
 
 test('renders zoom viewport with controls for image mode', async () => {
