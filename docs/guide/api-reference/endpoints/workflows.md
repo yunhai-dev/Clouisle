@@ -668,6 +668,18 @@ curl -X POST "https://your-domain.com/api/v1/workflows/webhook/wh_abc123" \
 
 ### Response
 
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "running"
+  }
+}
+```
+
+---
 
 ## Human-in-the-Loop: Pause & Resume Endpoints
 
@@ -689,24 +701,31 @@ Authorization: Bearer <token>
   "code": 0,
   "message": "success",
   "data": {
-    "id": "pr_01j8abcde",
-    "run_id": "run_01j8xyz",
-    "node_id": "pause_node_1",
-    "title": "Manager Approval Required",
-    "description": "Please review generated contract before sending",
-    "mode": "approval",
-    "input_variables": [
-      {
-        "name": "reviewer_comment",
-        "type": "string",
-        "required": false
-      }
-    ],
-    "status": "pending",
-    "created_at": "2026-03-02T10:00:00Z"
+    "pause_request": {
+      "id": "pr_01j8abcde",
+      "run_id": "run_01j8xyz",
+      "node_id": "pause_node_1",
+      "title": "Manager Approval Required",
+      "description": "Please review generated contract before sending",
+      "mode": "approval",
+      "input_variables": [
+        {
+          "name": "reviewer_comment",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "approver_ids": ["usr_123"],
+      "approver_names": ["alice"],
+      "require_all": false,
+      "approvals": [],
+      "already_submitted": false,
+      "can_submit": true
+    }
   }
 }
 ```
+> If there is no active pause request for the run, `data.pause_request` is returned as `null`.
 
 ### 2. Submit Pause Request Response
 

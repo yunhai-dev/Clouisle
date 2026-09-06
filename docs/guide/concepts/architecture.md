@@ -108,13 +108,13 @@ Browser → (optional external reverse proxy / Ingress) → Next.js SSR (node se
 Clouisle implements a durable, decoupled `AgentRun` execution model for conversational agents:
 
 ```
-User Message ──► FastAPI (POST /chat/runs) ──► Redis Queue (Celery default)
-                       │ (202 Accepted, run_id)           │
-                       ▼                                  ▼
-                  SSE Stream                  Celery Worker (run_agent_task)
-           (GET /chat/runs/{id}/stream)                   │
-                       ▲                         Acquires Conversation Lock
-                       │                                  │
+User Message ──► FastAPI (POST /api/v1/agents/{agent_id}/chat/runs) ──► Redis Queue (Celery default)
+                       │ (202 Accepted, run_id)                           │
+                       ▼                                                  ▼
+                  SSE Stream                                  Celery Worker (run_agent_task)
+     (GET /api/v1/agents/{agent_id}/chat/runs/{id}/stream)                │
+                       ▲                                         Acquires Conversation Lock
+                       │                                                  │
               Redis Event Buffer ◄──────────────── AgentLoop ReAct Cycle
               (SSE Event Pub/Sub)                         │
                                                ┌──────────┴──────────┐

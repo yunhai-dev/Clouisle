@@ -9,7 +9,7 @@ This guide explains how to share published AI agents via the dedicated Run page 
 Once an agent is configured and published, Clouisle provides two distinct delivery channels:
 
 1. **Independent Run Page (`/run/{agent_id}`)**: A distraction-free, full-screen conversational interface designed for team members and authenticated users.
-2. **Embeddable Chat Widget (`/embed/agent/{token}`)**: A secure, public-facing script and iframe integration for embedding agents into SaaS apps, documentation portals, or corporate landing pages.
+2. **Embeddable Chat Widget (`/embed/agents/{agent_id}/...`)**: A secure integration for embedding agents into SaaS apps, documentation portals, or corporate landing pages using a scoped API key (`clou_...`).
 
 ---
 
@@ -59,13 +59,13 @@ Clouisle allows you to embed published agents into third-party web pages via eit
 2. Ensure the agent is **Published**.
 3. Click the **Embed** button on the top toolbar to open the `EmbedConfigurationDrawer`.
 4. Toggle **Enable Embedding** on.
-5. A unique public **Embed Token** (`token`) will be generated.
+5. Generate or select a team API key (`clou_...`) with agent chat permissions.
 
 ### Configuration Options
 
 | Option | Description | Example |
 |---|---|---|
-| **Allowed Domains** | Restrict widget loading to specific origin domains (CORS security) | `https://example.com, https://app.example.com` |
+| **Allowed Domains** | Restrict widget loading to specific browser origins (`Origin` / `Referer` check for browser clients) | `https://example.com, https://app.example.com` |
 | **Widget Mode** | Choose between a floating launcher bubble or an inline embed | `Floating Bubble` or `Inline Iframe` |
 | **Theme & Accent Color** | Customize the widget primary color to match your brand | `#2563eb` (Blue) or dark/light auto-match |
 | **Chat Bubble Position** | Screen placement for the floating trigger button | `Bottom Right` or `Bottom Left` |
@@ -83,7 +83,8 @@ Paste this snippet immediately before the closing `</body>` tag on your website:
 <!-- Clouisle Agent Chat Widget -->
 <script
   src="https://<your-clouisle-domain>/embed/clouisle-chat.js"
-  data-agent-token="emb_a1b2c3d4e5f6..."
+  data-agent-id="550e8400-e29b-41d4-a716-446655440000"
+  data-api-key="clou_a1b2c3d4e5f6..."
   data-theme="auto"
   data-position="bottom-right"
   async
@@ -96,7 +97,7 @@ To embed the agent conversation directly inside a container on your page:
 
 ```html
 <iframe
-  src="https://<your-clouisle-domain>/embed/agent/emb_a1b2c3d4e5f6...?theme=light"
+  src="https://<your-clouisle-domain>/embed/agent/550e8400-e29b-41d4-a716-446655440000?token=clou_a1b2c3d4e5f6...&theme=light"
   width="100%"
   height="700px"
   frameborder="0"
@@ -109,7 +110,7 @@ To embed the agent conversation directly inside a container on your page:
 
 ## 4. Security & Access Control
 
-- **Token-based Authentication**: Embedded widgets communicate through secure scoped tokens rather than user session cookies.
-- **Domain Whitelisting**: Set **Allowed Domains** in the Embed drawer to prevent unauthorized embedding on third-party sites.
+- **API Key Authentication**: Embedded widgets authenticate using a team API key (`clou_...`) passed in the `token` query parameter or `Authorization: Bearer <key>` header.
+- **Domain Verification**: When configured, `allowed_domains` restricts where browser clients can load the widget by verifying the `Origin` and `Referer` headers. (Note: API key authentication remains the primary access control).
 - **Rate Limiting**: Embedded chats inherit platform rate limits to protect backend LLM quotas and infrastructure.
-- **Isolated Sandbox**: Embedded sessions cannot access internal team models, settings, or administrative logs.
+- **Isolated Scope**: Embedded sessions cannot access internal team models, settings, or administrative management endpoints.

@@ -67,6 +67,34 @@ Content-Type: application/json
     ]
   }
 }
+
+---
+
+## Disable TOTP
+
+Disable TOTP 2FA for the authenticated user. Requires the current account password and either a valid TOTP code or a recovery backup code.
+
+```http
+POST /api/v1/totp/disable HTTP/1.1
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "password": "CurrentPassword123!",
+  "code": "123456",
+  "is_backup_code": false
+}
+```
+
+### Response (`200 OK`)
+
+```json
+{
+  "code": 0,
+  "message": "TOTP two-factor authentication disabled successfully",
+  "data": null
+}
+```
 ```
 
 ---

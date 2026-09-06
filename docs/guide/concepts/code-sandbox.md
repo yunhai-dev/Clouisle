@@ -16,18 +16,18 @@ Agent/Workflow → API → Celery Queue (sandbox) → Sandbox Worker
 
 ### Deep-Dive Bubblewrap Namespace & Mount Layout
 
-Each code execution launches a dedicated `bwrap` process configured with strict namespace isolation:
+When filesystem isolation is enabled (`SANDBOX_FILESYSTEM_ISOLATION_ENABLED=true`), the sandbox launcher wraps executions in a dedicated `bwrap` process configured with strict namespace isolation:
 
 ```text
 bwrap \
   --unshare-user --unshare-pid --unshare-ipc --unshare-uts \
   --die-with-parent --hostname clouisle-sandbox \
   --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /etc /etc \
-  --proc /proc --dev /dev \
+  --dir /proc --dev /dev \
   --bind <host_job_dir> /workspace \
   --bind <host_job_dir>/tmp /tmp \
-  --dir /tmp --chdir /workspace \
-  --clearenv --setenv PATH "..." --setenv HOME "/workspace" ...
+  --chdir /workspace \
+  -- <command> <args...>
 ```
 
 #### 1. Namespace & Process Confinement
