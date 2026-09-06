@@ -279,6 +279,24 @@ export interface ChunkPreviewResponse {
 // ============ Knowledge Base API ============
 
 function createKnowledgeBasesApi(prefix: '/knowledge-bases' | '/admin/knowledge-bases') {
+  const getDocumentFile = async (kbId: string, docId: string): Promise<Blob> => {
+    const token = localStorage.getItem('access_token')
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+    const url = `${baseUrl}${prefix}/${kbId}/documents/${docId}/download`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('Download failed')
+    }
+
+    return response.blob()
+  }
   return {
     /**
      * 获取知识库列表
@@ -544,25 +562,15 @@ function createKnowledgeBasesApi(prefix: '/knowledge-bases' | '/admin/knowledge-
   },
 
   /**
-   * 下载文档原文件
+   * 获取文档原文件，用于在线预览或下载。
+   */
+  getDocumentFile,
+
+  /**
+   * 下载文档原文件。
    */
   downloadDocument: async (kbId: string, docId: string, filename: string): Promise<void> => {
-    const token = localStorage.getItem('access_token')
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
-    const url = `${baseUrl}${prefix}/${kbId}/documents/${docId}/download`
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    })
-    
-    if (!response.ok) {
-      throw new Error('Download failed')
-    }
-    
-    const blob = await response.blob()
+    const blob = await getDocumentFile(kbId, docId)
     const downloadUrl = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = downloadUrl
@@ -572,7 +580,7 @@ function createKnowledgeBasesApi(prefix: '/knowledge-bases' | '/admin/knowledge-
     document.body.removeChild(link)
     window.URL.revokeObjectURL(downloadUrl)
   }
-  }
+}
 }
 
 export const knowledgeBasesApi = createKnowledgeBasesApi('/knowledge-bases')

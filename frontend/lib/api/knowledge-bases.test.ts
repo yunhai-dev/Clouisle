@@ -233,6 +233,26 @@ describe('knowledge base APIs', () => {
       Object.assign(globalThis, { fetch: originalFetch, localStorage: originalLocalStorage })
     }
   })
+  test('returns an authenticated document blob for online previews', async () => {
+    const originalFetch = globalThis.fetch
+    const originalLocalStorage = globalThis.localStorage
+    const fetchMock = mock(() => Promise.resolve(new Response(new Blob(['report']))))
+    Object.assign(globalThis, {
+      fetch: fetchMock,
+      localStorage: { getItem: () => 'token-1' },
+    })
+
+    try {
+      const result = await knowledgeBasesApi.getDocumentFile('kb-1', 'doc-1')
+      expect(await result.text()).toBe('report')
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8000/api/v1/knowledge-bases/kb-1/documents/doc-1/download',
+        { method: 'GET', headers: { Authorization: 'Bearer token-1' } }
+      )
+    } finally {
+      Object.assign(globalThis, { fetch: originalFetch, localStorage: originalLocalStorage })
+    }
+  })
 
   test('downloads a successful response and releases its object URL', async () => {
     const blob = new Blob(['report'])

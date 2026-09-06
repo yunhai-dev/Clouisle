@@ -44,7 +44,7 @@ for (const path of [
 mock.module('lucide-react', () => Object.fromEntries([
   'ArrowLeft', 'Play', 'RefreshCw', 'Trash2', 'Settings2', 'FileText', 'Loader2', 'CheckCircle',
   'XCircle', 'Clock', 'ChevronLeft', 'ChevronRight', 'Save', 'RotateCcw', 'Plus', 'GripVertical',
-  'AlertTriangle', 'Eye',
+  'AlertTriangle', 'Eye', 'Download', 'X', 'Expand', 'ZoomIn', 'ZoomOut',
 ].map(name => [name, name])))
 
 interface HookSlot { value?: unknown; deps?: readonly unknown[]; cleanup?: () => void }

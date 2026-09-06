@@ -26,6 +26,7 @@ import {
   type KnowledgeBase,
   type ChunkPreviewItem,
 } from '@/lib/api'
+import { FilePreviewPanel, getDocumentMimeType } from '@/components/file-preview'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +67,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
   
   // 当前选中的文档 tab
   const [activeDocId, setActiveDocId] = React.useState<string>(documentIds[0] || '')
+  const [originalPreviewDocId, setOriginalPreviewDocId] = React.useState<string | null>(null)
 
   // 编辑状态：记录正在编辑的分块 { docId: chunkIndex }
   const [editingChunk, setEditingChunk] = React.useState<{ docId: string; chunkIndex: number } | null>(null)
@@ -320,6 +322,7 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
 
   // 移除文档
   const handleRemoveDocument = (docId: string) => {
+    setOriginalPreviewDocId(null)
     setDocumentsState(prev => {
       const newState = { ...prev }
       delete newState[docId]
@@ -498,6 +501,11 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
   const readyToProcessCount = Object.values(documentsState).filter(
     state => state.document?.status !== 'processing' && state.previewChunks && state.previewChunks.length > 0
   ).length
+  const activeDocument = documentsState[activeDocId]?.document ?? null
+  const loadActiveOriginalFile = React.useCallback(() => {
+    if (!activeDocId) return Promise.reject(new Error('Document is not selected'))
+    return adminKnowledgeBasesApi.getDocumentFile(knowledgeBaseId, activeDocId)
+  }, [knowledgeBaseId, activeDocId])
 
   const validDocuments = Object.entries(documentsState).filter(([, state]) => state.document)
 
@@ -548,6 +556,17 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
               </p>
             </div>
           </div>
+          {activeDocument && activeDocument.doc_type !== 'url' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOriginalPreviewDocId(activeDocId)}
+              aria-label={t('previewOriginal')}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              {t('previewOriginal')}
+            </Button>
+          )}
         </div>
 
         {/* 文档 Tab 栏 */}
@@ -556,7 +575,10 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
             {validDocuments.map(([docId, state]) => (
               <button
                 key={docId}
-                onClick={() => setActiveDocId(docId)}
+                onClick={() => {
+                  setActiveDocId(docId)
+                  setOriginalPreviewDocId(null)
+                }}
                 className={cn(
                   "group relative flex items-center gap-2 px-4 py-2 rounded-t-lg border-b-2 transition-colors",
                   activeDocId === docId
@@ -604,6 +626,34 @@ export function DocumentsPreviewClient({ knowledgeBaseId, documentIds }: Documen
           {(() => {
             const state = documentsState[activeDocId]
             if (!state) return null
+            if (originalPreviewDocId === activeDocId && state.document) {
+              return (
+                <FilePreviewPanel
+                  file={{
+                    filename: state.document.name,
+                    mimeType: getDocumentMimeType(state.document.name, state.document.doc_type),
+                    size: state.document.file_size,
+                  }}
+                  loadFile={loadActiveOriginalFile}
+                  onClose={() => setOriginalPreviewDocId(null)}
+                  labels={{
+                    title: t('previewOriginalTitle'),
+                    loading: t('previewOriginalLoading'),
+                    unavailable: t('previewOriginalUnavailable'),
+                    loadError: t('previewOriginalLoadError'),
+                    tooLarge: t('previewOriginalTooLarge'),
+                    download: t('downloadOriginal'),
+                    close: t('previewOriginalClose'),
+                    sheet: t('previewOriginalSheet'),
+                    rowsLimited: ({ rows, columns }) => t('previewOriginalRowsLimited', { rows, columns }),
+                    parseError: t('previewOriginalParseError'),
+                    zoomIn: t('previewOriginalZoomIn'),
+                    zoomOut: t('previewOriginalZoomOut'),
+                    fitToView: t('previewOriginalFitToView'),
+                  }}
+                />
+              )
+            }
 
             if (state.isPreviewing) {
               return (

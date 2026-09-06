@@ -23,7 +23,9 @@ mock.module('react/jsx-runtime', () => ({
   jsxs: (type: unknown, props: Record<string, unknown>) => ({ type, props }),
   Fragment: 'fragment',
 }))
+const ActualReact = await import('react')
 mock.module('react', () => ({
+  ...ActualReact,
   useCallback: <T,>(callback: T) => callback,
   useEffect: (effect: () => void | (() => void)) => effects.push(effect),
   useState: <T,>(initial: T) => {
@@ -71,7 +73,7 @@ mock.module('@/components/ui/switch', () => ({
   }),
 }))
 
-const icons = ['ArrowLeft', 'Play', 'FileText', 'Loader2', 'Settings2', 'Eye', 'AlertTriangle', 'CheckCircle2', 'X', 'Pencil', 'Check', 'Trash2', 'Plus']
+const icons = ['ArrowLeft', 'Play', 'FileText', 'Loader2', 'Settings2', 'Eye', 'AlertTriangle', 'CheckCircle2', 'X', 'Pencil', 'Check', 'Trash2', 'Plus', 'Download', 'Expand', 'ZoomIn', 'ZoomOut']
 mock.module('lucide-react', () => Object.fromEntries(icons.map(name => [name, (props: Record<string, unknown>) => ({
   type: 'svg',
   props: { ...props, 'data-icon': name },
