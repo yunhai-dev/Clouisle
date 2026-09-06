@@ -1770,7 +1770,7 @@ async def _enqueue_existing_message_run(
     message_start: dict[str, Any] | None = None,
 ) -> dict:
     """Queue a run whose user and assistant rows already exist."""
-    from app.services.agent_run_store import create_run, transition_run
+    from app.services.agent_run_store import create_run, transition_run_if_status
     from app.services.agent_run_worker import build_payload
 
     run = await create_run(
@@ -1822,9 +1822,11 @@ async def _enqueue_existing_message_run(
             await run.save(update_fields=["celery_task_id"])
     except Exception as exc:
         from app.models.agent_run import AgentRunStatus
+        from app.services.agent_run_store import transition_run_if_status
 
-        await transition_run(
+        await transition_run_if_status(
             run,
+            AgentRunStatus.QUEUED,
             AgentRunStatus.FAILED,
             error_code="enqueue_failed",
             error_message=str(exc),
@@ -1922,7 +1924,7 @@ async def _enqueue_durable_chat_run(
         user_msg.file_urls = updated_file_urls
         await user_msg.save(update_fields=["file_urls"])
 
-    from app.services.agent_run_store import create_run, transition_run
+    from app.services.agent_run_store import create_run, transition_run_if_status
     from app.services.agent_run_worker import build_payload
 
     run = await create_run(
@@ -1973,9 +1975,11 @@ async def _enqueue_durable_chat_run(
             await run.save(update_fields=["celery_task_id"])
     except Exception as exc:
         from app.models.agent_run import AgentRunStatus
+        from app.services.agent_run_store import transition_run_if_status
 
-        await transition_run(
+        await transition_run_if_status(
             run,
+            AgentRunStatus.QUEUED,
             AgentRunStatus.FAILED,
             error_code="enqueue_failed",
             error_message=str(exc),
@@ -2170,22 +2174,24 @@ async def post_run_answer(
             resumed.celery_task_id = task_id
             await resumed.save(update_fields=["celery_task_id"])
     except Exception as exc:
-        from app.models.agent_run import AgentRunStatus
-        from app.services.agent_run_store import transition_run
-        from app.services.agent_run_stream import AgentRunStream
+        from app.services.agent_run_store import transition_run_if_status
 
-        await transition_run(
+        transitioned = await transition_run_if_status(
             resumed,
+            AgentRunStatus.QUEUED,
             AgentRunStatus.FAILED,
             error_code="enqueue_failed",
             error_message=str(exc),
         )
-        stream = AgentRunStream(run_id)
-        await stream.seed_sequence()
-        await stream.publish(
-            "error", {"code": "enqueue_failed", "msg": "Unable to resume run"}
-        )
-        await stream.publish("run_end", {"status": "failed"})
+        if transitioned is not None:
+            from app.services.agent_run_stream import AgentRunStream
+
+            stream = AgentRunStream(run_id)
+            await stream.seed_sequence()
+            await stream.publish(
+                "error", {"code": "enqueue_failed", "msg": "Unable to resume run"}
+            )
+            await stream.publish("run_end", {"status": "failed"})
         raise
 
     return success(data=_run_to_out(resumed))
@@ -2208,7 +2214,7 @@ async def stop_run(
         AgentRunInputKind,
         AgentRunStatus,
     )
-    from app.services.agent_run_store import enqueue_input, transition_run
+    from app.services.agent_run_store import enqueue_input, transition_run_if_status
 
     if run.status == AgentRunStatus.WAITING:
         from app.services.agent_run_store import stop_waiting_run
@@ -2250,9 +2256,27 @@ async def stop_run(
     ):
         # terminal: idempotent no-op
         return success(data=_run_to_out(run))
-    if run.status != AgentRunStatus.STOPPING:
-        await transition_run(run, AgentRunStatus.STOPPING)
-    await enqueue_input(run_id=run_id, kind=AgentRunInputKind.STOP)
+    if run.status == AgentRunStatus.RUNNING:
+        transitioned = await transition_run_if_status(
+            run, AgentRunStatus.RUNNING, AgentRunStatus.STOPPING
+        )
+        if transitioned is None:
+            run = await _AgentRunModel.get_or_none(id=run_id) or run
+            if run.status == AgentRunStatus.RUNNING:
+                transitioned = await transition_run_if_status(
+                    run, AgentRunStatus.RUNNING, AgentRunStatus.STOPPING
+                )
+                if transitioned is None:
+                    run = await _AgentRunModel.get_or_none(id=run_id) or run
+            if run.status not in (
+                AgentRunStatus.RUNNING,
+                AgentRunStatus.STOPPING,
+            ):
+                return success(data=_run_to_out(run))
+        if transitioned is not None:
+            run = transitioned
+    if run.status == AgentRunStatus.STOPPING:
+        await enqueue_input(run_id=run_id, kind=AgentRunInputKind.STOP)
     return success(data=_run_to_out(run))
 
 

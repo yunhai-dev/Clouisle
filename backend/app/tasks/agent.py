@@ -32,7 +32,7 @@ def _run_async(coro):
 def run_agent_task(self, payload: dict) -> dict:
     """Execute one AgentRun to terminal, publishing replayable events."""
     from app.services.agent_run_worker import run_agent_round
-    from app.services.agent_run_store import get_run, transition_run
+    from app.services.agent_run_store import get_run, transition_run_if_status
 
     run_id = UUID(payload["run_id"])
 
@@ -50,13 +50,42 @@ def run_agent_task(self, payload: dict) -> dict:
 
         async def _mark_failed():
             run = await get_run(run_id)
-            if run:
-                await transition_run(
-                    run,
-                    AgentRunStatus.FAILED,
-                    error_code="task_crash",
-                    error_message=error_text,
+            if not run:
+                return {"status": "failed", "error": error_text}
+            active_statuses = (
+                AgentRunStatus.QUEUED,
+                AgentRunStatus.RUNNING,
+                AgentRunStatus.STOPPING,
+                AgentRunStatus.COMPLETING,
+            )
+            if run.status not in active_statuses:
+                return {"status": run.status.value, "error": error_text}
+            failed = await transition_run_if_status(
+                run,
+                run.status,
+                AgentRunStatus.FAILED,
+                error_code="task_crash",
+                error_message=error_text,
+            )
+            if failed is None:
+                current = await get_run(run_id)
+                return {
+                    "status": current.status.value if current else "failed",
+                    "error": error_text,
+                }
+            try:
+                from app.services.agent_run_stream import AgentRunStream
+
+                stream = AgentRunStream(run_id)
+                await stream.seed_sequence()
+                await stream.publish("error", {"code": "task_crash", "msg": error_text})
+                await stream.publish("run_end", {"status": "failed"})
+            except Exception:
+                logger.warning(
+                    "Failed to publish crash state for AgentRun %s",
+                    run_id,
+                    exc_info=True,
                 )
-            return {"status": "failed", "error": error_text}
+            return {"status": AgentRunStatus.FAILED.value, "error": error_text}
 
         return _run_async(_mark_failed())

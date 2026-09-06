@@ -65,7 +65,9 @@ def test_cosine_score_and_repeated_rrf_results(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_store_chunks_handles_missing_embeddings_and_non_uuid_owner(monkeypatch):
+async def test_store_chunks_rejects_missing_embeddings_and_handles_non_uuid_owner(
+    monkeypatch,
+):
     document = SimpleNamespace(id=uuid4(), knowledge_base_id="legacy-kb")
     store = VectorStore()
     store.embed_texts = AsyncMock(side_effect=[[], [[0.1]]])
@@ -81,10 +83,10 @@ async def test_store_chunks_handles_missing_embeddings_and_non_uuid_owner(monkey
     ensure_dimension = AsyncMock()
     monkeypatch.setattr(vector_store, "_ensure_kb_dimension", ensure_dimension)
 
-    assert (
+    with pytest.raises(ValueError, match="Expected 1 embeddings, got 0"):
         await store.store_chunks(document, [{"content": "missing", "chunk_index": 0}])
-        == []
-    )
+    assert created == []
+
     assert (
         await store.store_chunks(document, [{"content": "available", "chunk_index": 1}])
         == created
@@ -94,10 +96,15 @@ async def test_store_chunks_handles_missing_embeddings_and_non_uuid_owner(monkey
 
 @pytest.mark.asyncio
 async def test_progress_without_callback_completes_loop(monkeypatch):
-    chunk = SimpleNamespace(id=uuid4(), save=AsyncMock())
-    monkeypatch.setattr(
-        vector_store.DocumentChunk, "create", AsyncMock(return_value=chunk)
-    )
+    created = []
+
+    async def bulk_create(items, using_db=None):
+        created.extend(items)
+        for item in items:
+            item.save = AsyncMock()
+
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_create", bulk_create)
+    monkeypatch.setattr(vector_store.DocumentChunk, "bulk_update", AsyncMock())
     store = VectorStore()
     store.embed_texts = AsyncMock(return_value=[[0.1]])
     store._store_embedding = AsyncMock()
@@ -107,8 +114,9 @@ async def test_progress_without_callback_completes_loop(monkeypatch):
         [{"content": "text", "chunk_index": 0}],
     )
 
-    assert result == [chunk]
-    assert chunk.status == "embedded"
+    assert len(result) == 1
+    assert result[0].status == "embedded"
+    assert result == created
 
 
 @pytest.mark.asyncio

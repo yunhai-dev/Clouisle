@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -13,6 +14,15 @@ def vs_mod():
     return sys.modules["app.services.vector_store"]
 
 
+@pytest.fixture(autouse=True)
+def fake_transaction(monkeypatch, vs_mod):
+    @asynccontextmanager
+    async def transaction():
+        yield object()
+
+    monkeypatch.setattr(vs_mod, "in_transaction", transaction)
+
+
 @pytest.mark.asyncio
 async def test_store_chunks_with_progress_batch_mode_success(monkeypatch, vs_mod):
     store = VectorStore()
@@ -20,20 +30,23 @@ async def test_store_chunks_with_progress_batch_mode_success(monkeypatch, vs_mod
     doc_id = uuid4()
     document = SimpleNamespace(id=doc_id, knowledge_base_id=kb_id)
 
-    created_objs = []
+    class FakeDocumentChunk:
+        def __init__(self, **kwargs):
+            self.id = kwargs["id"]
+            self.status = kwargs["status"]
+            self.error_message = None
+            self.metadata = kwargs.get("metadata")
+            self.save = AsyncMock()
 
-    async def _create(**kwargs):
-        chunk = SimpleNamespace(
-            id=uuid4(),
-            status=kwargs.get("status"),
-            error_message=None,
-            metadata=kwargs.get("metadata"),
-            save=AsyncMock(),
-        )
-        created_objs.append(chunk)
-        return chunk
+        @classmethod
+        async def bulk_create(cls, chunks, using_db=None):
+            return None
 
-    monkeypatch.setattr(vs_mod, "DocumentChunk", SimpleNamespace(create=_create))
+        @classmethod
+        async def bulk_update(cls, chunks, fields, using_db=None):
+            return None
+
+    monkeypatch.setattr(vs_mod, "DocumentChunk", FakeDocumentChunk)
     monkeypatch.setattr(vs_mod, "_ensure_kb_dimension", AsyncMock())
     store.embed_texts = AsyncMock(return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
     store._batch_store_embeddings = AsyncMock()
@@ -69,20 +82,23 @@ async def test_store_chunks_with_progress_batch_mode_fallback(monkeypatch, vs_mo
     doc_id = uuid4()
     document = SimpleNamespace(id=doc_id, knowledge_base_id=kb_id)
 
-    created_objs = []
+    class FakeDocumentChunk:
+        def __init__(self, **kwargs):
+            self.id = kwargs["id"]
+            self.status = kwargs["status"]
+            self.error_message = None
+            self.metadata = kwargs.get("metadata")
+            self.save = AsyncMock()
 
-    async def _create(**kwargs):
-        chunk = SimpleNamespace(
-            id=uuid4(),
-            status=kwargs.get("status"),
-            error_message=None,
-            metadata=kwargs.get("metadata"),
-            save=AsyncMock(),
-        )
-        created_objs.append(chunk)
-        return chunk
+        @classmethod
+        async def bulk_create(cls, chunks, using_db=None):
+            return None
 
-    monkeypatch.setattr(vs_mod, "DocumentChunk", SimpleNamespace(create=_create))
+        @classmethod
+        async def bulk_update(cls, chunks, fields, using_db=None):
+            return None
+
+    monkeypatch.setattr(vs_mod, "DocumentChunk", FakeDocumentChunk)
     monkeypatch.setattr(vs_mod, "_ensure_kb_dimension", AsyncMock())
     # Batch embedding fails, then fallback single embeds: 1st succeeds, 2nd fails
     store.embed_texts = AsyncMock(
@@ -131,11 +147,19 @@ async def test_add_chunk_vectors_batch_empty_and_success(monkeypatch, vs_mod):
     dummy_chunk = SimpleNamespace(
         id=uuid4(), content="text", document_id=uuid4(), save=AsyncMock()
     )
-    assert await store.add_chunk_vectors_batch(kb_id, [dummy_chunk]) == []
+    with pytest.raises(ValueError, match="Expected 1 embeddings, got 0"):
+        await store.add_chunk_vectors_batch(kb_id, [dummy_chunk])
 
     # Success
     store.embed_texts = AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
     store._batch_store_embeddings = AsyncMock()
+
+    class FakeDocumentChunk:
+        @classmethod
+        async def bulk_update(cls, chunks, fields, using_db=None):
+            return None
+
+    monkeypatch.setattr(vs_mod, "DocumentChunk", FakeDocumentChunk)
     monkeypatch.setattr(vs_mod, "_ensure_kb_dimension", AsyncMock())
 
     chunk1 = SimpleNamespace(
@@ -149,5 +173,3 @@ async def test_add_chunk_vectors_batch_empty_and_success(monkeypatch, vs_mod):
     assert len(res) == 2
     assert chunk1.status == "embedded"
     assert chunk2.status == "embedded"
-    chunk1.save.assert_awaited_once()
-    chunk2.save.assert_awaited_once()

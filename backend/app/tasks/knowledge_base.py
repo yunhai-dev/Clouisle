@@ -172,6 +172,23 @@ def _get_embedding_error(
     )
 
 
+def _get_chunk_error(
+    document: Document, chunk: DocumentChunk, user_locale: str = "en"
+) -> str:
+    """Return a useful failure detail without exposing the internal sentinel."""
+    error_message = getattr(chunk, "error_message", None)
+    metadata = getattr(chunk, "metadata", None) or {}
+    detail = metadata.get("error_detail") if isinstance(metadata, dict) else None
+    if error_message and error_message != "document_process_failed":
+        return str(error_message)
+    if detail:
+        return str(detail)
+    return t(
+        "unknown_error_generic",
+        lang=_get_document_error_lang(document, user_locale),
+    )
+
+
 def _is_stale_task(document: Document, task_id: str | None) -> bool:
     return bool(task_id) and (document.metadata or {}).get("task_id") not in (
         None,
@@ -526,8 +543,8 @@ async def _process_document(document_id: str, task_id: str | None) -> dict[str, 
             # All failed
             document.status = DocumentStatus.ERROR.value
             first_error = (
-                getattr(failed_chunks[0], "error_message", None)
-                if failed_chunks and getattr(failed_chunks[0], "error_message", None)
+                _get_chunk_error(document, failed_chunks[0], user_locale)
+                if failed_chunks
                 else t("unknown_error_generic", lang=user_locale)
             )
             document.error_message = t(
@@ -557,8 +574,8 @@ async def _process_document(document_id: str, task_id: str | None) -> dict[str, 
             # Partial failure
             document.status = DocumentStatus.ERROR.value
             first_error = (
-                getattr(failed_chunks[0], "error_message", None)
-                if failed_chunks and getattr(failed_chunks[0], "error_message", None)
+                _get_chunk_error(document, failed_chunks[0], user_locale)
+                if failed_chunks
                 else t("unknown_error_generic", lang=user_locale)
             )
             document.error_message = t(
@@ -1132,8 +1149,10 @@ async def _embed_existing_document_chunks(
         for i in range(0, len(chunks_to_embed), CHUNK_BATCH_SIZE):
             batch = chunks_to_embed[i : i + CHUNK_BATCH_SIZE]
             try:
-                await vector_store.add_chunk_vectors_batch(kb_id, batch)
-                embedded_count += len(batch)
+                embedded_batch = await vector_store.add_chunk_vectors_batch(
+                    kb_id, batch
+                )
+                embedded_count += len(embedded_batch)
             except Exception as batch_exc:
                 logger.warning(
                     "Batch embed failed for document %s, falling back to per-chunk: %s",
@@ -1409,8 +1428,10 @@ def retry_failed_chunks_task(self, document_id: str) -> dict:
             for i in range(0, len(failed_chunks), CHUNK_BATCH_SIZE):
                 batch = failed_chunks[i : i + CHUNK_BATCH_SIZE]
                 try:
-                    await vector_store.add_chunk_vectors_batch(kb.id, batch)
-                    embedded_count += len(batch)
+                    embedded_batch = await vector_store.add_chunk_vectors_batch(
+                        kb.id, batch
+                    )
+                    embedded_count += len(embedded_batch)
                 except Exception as batch_exc:
                     logger.warning(
                         "Batch retry failed for document %s, falling back to per-chunk: %s",

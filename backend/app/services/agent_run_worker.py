@@ -425,6 +425,34 @@ def _tools_definitions(tools_openai: list[dict] | None):
     ]
 
 
+async def _transition_active_run(
+    run: AgentRun,
+    status: AgentRunStatus,
+    *,
+    allowed_statuses: tuple[AgentRunStatus, ...],
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> tuple[AgentRun | None, bool]:
+    """Apply a terminal/intermediate transition without overwriting a winner."""
+    current = run
+    for _ in range(len(allowed_statuses) + 1):
+        if current.status not in allowed_statuses:
+            return current, False
+        transitioned = await agent_run_store.transition_run_if_status(
+            current,
+            current.status,
+            status,
+            error_code=error_code,
+            error_message=error_message,
+        )
+        if transitioned is not None:
+            return transitioned, True
+        current = await agent_run_store.get_run(current.id)
+        if current is None:
+            return None, False
+    return current, False
+
+
 async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
     """Execute one run payload to terminal and persist the canonical round."""
     payload = dict(payload)
@@ -436,38 +464,84 @@ async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
         AgentRunStatus.STOPPED,
         AgentRunStatus.COMPLETED,
         AgentRunStatus.FAILED,
+        AgentRunStatus.INTERRUPTED,
     ):
         return {"status": run.status.value}
+    if run.status in (AgentRunStatus.WAITING, AgentRunStatus.COMPLETING):
+        return {"status": run.status.value}
+    if run.status == AgentRunStatus.QUEUED:
+        run = await agent_run_store.claim_queued_run(run.id)
+        if run is None:
+            current = await agent_run_store.get_run(UUID(payload["run_id"]))
+            if current is None:
+                raise LookupError("run not found")
+            return {"status": current.status.value}
     if (
         run.status == AgentRunStatus.STOPPING
         or await agent_run_store.has_pending_inputs(run.id, kind=AgentRunInputKind.STOP)
     ):
-        await agent_run_store.transition_run(run, AgentRunStatus.STOPPED)
-        stream = AgentRunStream(run.id)
-        await stream.seed_sequence()
-        await stream.publish("run_end", {"status": "stopped"})
-        return {"status": AgentRunStatus.STOPPED.value}
+        stopped, transitioned = await _transition_active_run(
+            run,
+            AgentRunStatus.STOPPED,
+            allowed_statuses=(AgentRunStatus.RUNNING, AgentRunStatus.STOPPING),
+        )
+        if stopped is None:
+            raise LookupError("run not found")
+        if transitioned and stopped.status == AgentRunStatus.STOPPED:
+            stream = AgentRunStream(run.id)
+            await stream.seed_sequence()
+            await stream.publish("run_end", {"status": "stopped"})
+        return {"status": stopped.status.value}
     agent = await Agent.get_or_none(id=UUID(payload["agent_id"]))
     conversation = await Conversation.get_or_none(id=UUID(payload["conversation_id"]))
     if not agent or not conversation:
-        await agent_run_store.transition_run(
+        failed, _ = await _transition_active_run(
             run,
             AgentRunStatus.FAILED,
+            allowed_statuses=(AgentRunStatus.RUNNING, AgentRunStatus.STOPPING),
             error_code="context_lost",
             error_message="Agent or conversation missing",
         )
-        return {"status": AgentRunStatus.FAILED.value}
-
+        if failed is None:
+            raise LookupError("run not found")
+        return {"status": failed.status.value}
     stream = AgentRunStream(run.id)
     await stream.seed_sequence()
     owned = await agent_run_store.acquire_run_lock(run.id, conversation.id)
     if not owned:
-        await agent_run_store.transition_run(
-            run,
+        current = await agent_run_store.get_run(run.id)
+        if current is None:
+            raise LookupError("run not found")
+        stop_requested = (
+            current.status == AgentRunStatus.STOPPING
+            or await agent_run_store.has_pending_inputs(
+                run.id, kind=AgentRunInputKind.STOP
+            )
+        )
+        if stop_requested:
+            current, transitioned = await _transition_active_run(
+                current,
+                AgentRunStatus.STOPPED,
+                allowed_statuses=(AgentRunStatus.RUNNING, AgentRunStatus.STOPPING),
+            )
+            if current is None:
+                raise LookupError("run not found")
+            if current.status != AgentRunStatus.STOPPED:
+                return {"status": current.status.value}
+            if transitioned:
+                await stream.publish("run_end", {"status": "stopped"})
+            return {"status": AgentRunStatus.STOPPED.value}
+        failed, transitioned = await _transition_active_run(
+            current,
             AgentRunStatus.FAILED,
+            allowed_statuses=(AgentRunStatus.RUNNING,),
             error_code="lock_busy",
             error_message="Another run is active for this conversation",
         )
+        if failed is None:
+            raise LookupError("run not found")
+        if not transitioned:
+            return {"status": failed.status.value}
         await stream.publish(
             "error",
             {"code": "lock_busy", "msg": "Another run is active for this conversation"},
@@ -479,7 +553,7 @@ async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
         agent_run_store.heartbeat_run_lock(run.id, conversation.id, lease_stop)
     )
 
-    await agent_run_store.transition_run(run, AgentRunStatus.RUNNING)
+    # The queued claim above owns the RUNNING transition before publication.
     await stream.publish("run_start", {"status": "running", "run_id": str(run.id)})
 
     event_queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
@@ -670,12 +744,19 @@ async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
             await agent_run_store.drop_pending_inputs(run.id)
             await flush_queued_events()
             await _finalize_stopped(canonical, result, stream)
-            await agent_run_store.transition_run(run, AgentRunStatus.STOPPED)
-            await stream.publish(
-                "run_end", {"status": "stopped", "reason": "deadline_exceeded"}
+            stopped, transitioned = await _transition_active_run(
+                run,
+                AgentRunStatus.STOPPED,
+                allowed_statuses=(AgentRunStatus.RUNNING, AgentRunStatus.STOPPING),
             )
+            if stopped is None:
+                raise LookupError("run not found")
+            if stopped.status == AgentRunStatus.STOPPED and transitioned:
+                await stream.publish(
+                    "run_end", {"status": "stopped", "reason": "deadline_exceeded"}
+                )
             return {
-                "status": AgentRunStatus.STOPPED.value,
+                "status": stopped.status.value,
                 "reason": "deadline_exceeded",
             }
 
@@ -683,20 +764,55 @@ async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
             await agent_run_store.drop_pending_inputs(run.id)
             await flush_queued_events()
             await _finalize_stopped(canonical, result, stream)
-            await agent_run_store.transition_run(run, AgentRunStatus.STOPPED)
-            await stream.publish(
-                "run_end", {"status": "stopped", "message_id": str(canonical.id)}
+            stopped, transitioned = await _transition_active_run(
+                run,
+                AgentRunStatus.STOPPED,
+                allowed_statuses=(AgentRunStatus.RUNNING, AgentRunStatus.STOPPING),
             )
+            if stopped is None:
+                raise LookupError("run not found")
+            if stopped.status == AgentRunStatus.STOPPED and transitioned:
+                await stream.publish(
+                    "run_end", {"status": "stopped", "message_id": str(canonical.id)}
+                )
             return {
-                "status": AgentRunStatus.STOPPED.value,
+                "status": stopped.status.value,
                 "message_id": str(canonical.id),
             }
 
-        # Atomic completing transition: only the worker flips running ->
-        # completing. Inputs accepted before this point were consumed above;
-        # enqueue after terminal starts a fresh run.
-        if run.status == AgentRunStatus.RUNNING:
-            await agent_run_store.transition_run(run, AgentRunStatus.COMPLETING)
+        # Atomically claim completion so a concurrent stop cannot be
+        # overwritten by the finalization path.
+        completing, claimed = await _transition_active_run(
+            run,
+            AgentRunStatus.COMPLETING,
+            allowed_statuses=(AgentRunStatus.RUNNING,),
+        )
+        if not claimed:
+            current = completing
+            if current is None:
+                raise LookupError("run not found")
+            if current.status == AgentRunStatus.STOPPING:
+                await agent_run_store.drop_pending_inputs(run.id)
+                await flush_queued_events()
+                await _finalize_stopped(canonical, result, stream)
+                stopped, stopped_claimed = await _transition_active_run(
+                    current,
+                    AgentRunStatus.STOPPED,
+                    allowed_statuses=(AgentRunStatus.RUNNING, AgentRunStatus.STOPPING),
+                )
+                if stopped is None:
+                    raise LookupError("run not found")
+                if stopped.status == AgentRunStatus.STOPPED and stopped_claimed:
+                    await stream.publish(
+                        "run_end",
+                        {"status": "stopped", "message_id": str(canonical.id)},
+                    )
+                return {
+                    "status": stopped.status.value,
+                    "message_id": str(canonical.id),
+                }
+            return {"status": current.status.value}
+
         await agent_run_store.drop_pending_inputs(run.id)
         await flush_queued_events()
         await _finalize_completed(
@@ -709,10 +825,20 @@ async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
             model_used=loop_context.model_used,
             locale=payload.get("locale"),
         )
-        await agent_run_store.transition_run(run, AgentRunStatus.COMPLETED)
+        completed, completed_claimed = await _transition_active_run(
+            run,
+            AgentRunStatus.COMPLETED,
+            allowed_statuses=(AgentRunStatus.COMPLETING,),
+        )
+        if completed is None:
+            raise LookupError("run not found")
+        if not completed_claimed:
+            return {
+                "status": completed.status.value,
+                "message_id": str(canonical.id),
+            }
         await stream.publish(
-            "run_end",
-            {"status": "completed", "message_id": str(canonical.id)},
+            "run_end", {"status": "completed", "message_id": str(canonical.id)}
         )
         return {
             "status": AgentRunStatus.COMPLETED.value,
@@ -721,12 +847,21 @@ async def run_agent_round(payload: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         await flush_queued_events()
         logger.exception("Agent run %s failed", run.id)
-        await agent_run_store.transition_run(
+        failed, transitioned = await _transition_active_run(
             run,
             AgentRunStatus.FAILED,
+            allowed_statuses=(
+                AgentRunStatus.RUNNING,
+                AgentRunStatus.STOPPING,
+                AgentRunStatus.COMPLETING,
+            ),
             error_code=type(exc).__name__,
             error_message=str(exc),
         )
+        if failed is None:
+            raise LookupError("run not found") from exc
+        if not transitioned:
+            return {"status": failed.status.value, "error": str(exc)}
         await stream.publish(
             "error",
             {"code": "run_failed", "msg": str(exc)},

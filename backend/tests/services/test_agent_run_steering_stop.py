@@ -281,6 +281,15 @@ async def test_stop_endpoint_idempotent(monkeypatch):
     async def _enqueue(run_id, kind, **kw):
         return None
 
+    async def _transition_if_status(r, expected, status, **kw):
+        if r.status != expected:
+            return None
+        return await _transition(r, status, **kw)
+
+    monkeypatch.setattr(
+        agent_run_store, "transition_run_if_status", _transition_if_status
+    )
+
     monkeypatch.setattr(agent_run_store, "transition_run", _transition)
     monkeypatch.setattr(agent_run_store, "enqueue_input", _enqueue)
 
