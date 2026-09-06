@@ -668,7 +668,94 @@ curl -X POST "https://your-domain.com/api/v1/workflows/webhook/wh_abc123" \
 
 ### Response
 
-**Success (200 OK):**
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "run_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "running"
+  }
+}
+```
+
+---
+
+## Human-in-the-Loop: Pause & Resume Endpoints
+
+When a workflow executes a `pause` node in either **variables** mode (requesting human input) or **approval** mode (requesting an explicit approve/reject decision), the workflow run enters `waiting` status and generates a pending pause request.
+
+### 1. Get Pending Pause Request
+
+Retrieve active pause requests for a waiting run.
+
+```http
+GET /api/v1/workflows/{workflow_id}/runs/{run_id}/pause-request HTTP/1.1
+Authorization: Bearer <token>
+```
+
+#### Response (`200 OK`)
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "pause_request": {
+      "id": "pr_01j8abcde",
+      "run_id": "run_01j8xyz",
+      "node_id": "pause_node_1",
+      "title": "Manager Approval Required",
+      "description": "Please review generated contract before sending",
+      "mode": "approval",
+      "input_variables": [
+        {
+          "name": "reviewer_comment",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "approver_ids": ["usr_123"],
+      "approver_names": ["alice"],
+      "require_all": false,
+      "approvals": [],
+      "already_submitted": false,
+      "can_submit": true
+    }
+  }
+}
+```
+> If there is no active pause request for the run, `data.pause_request` is returned as `null`.
+
+### 2. Submit Pause Request Response
+
+Submit human feedback or decision to resume the paused workflow execution.
+
+```http
+POST /api/v1/workflows/{workflow_id}/runs/{run_id}/pause-requests/{pause_request_id}/submit HTTP/1.1
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "action": "approve",
+  "variables": {
+    "reviewer_comment": "Verified and approved for dispatch"
+  }
+}
+```
+
+#### Response (`200 OK`)
+
+```json
+{
+  "code": 0,
+  "message": "Pause request submitted successfully; workflow run resumed",
+  "data": {
+    "run_id": "run_01j8xyz",
+    "status": "running"
+  }
+}
+```
 
 ```json
 {

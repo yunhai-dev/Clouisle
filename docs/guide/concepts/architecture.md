@@ -103,48 +103,69 @@ Browser → (optional external reverse proxy / Ingress) → Next.js SSR (node se
                                                          Response
 ```
 
-#### 2. Chat Request Flow (with RAG)
+#### 2. Chat Request Flow & Asynchronous AgentRun Lifecycle
+
+Clouisle implements a durable, decoupled `AgentRun` execution model for conversational agents:
 
 ```
-User Message → FastAPI → Agent Engine → Retrieval target
-                                      ├── Vector search → Qdrant
-                                      ├── Lexical search → PostgreSQL/pg_search
-                                      └── Optional rerank model
-                                                       ↓
-                                              Retrieved chunks
-                                      ↓
-                         LLM Adapter → LLM Provider → Response (SSE)
+User Message ──► FastAPI (POST /api/v1/agents/{agent_id}/chat/runs) ──► Redis Queue (Celery default)
+                       │ (202 Accepted, run_id)                           │
+                       ▼                                                  ▼
+                  SSE Stream                                  Celery Worker (run_agent_task)
+     (GET /api/v1/agents/{agent_id}/chat/runs/{id}/stream)                │
+                       ▲                                         Acquires Conversation Lock
+                       │                                                  │
+              Redis Event Buffer ◄──────────────── AgentLoop ReAct Cycle
+              (SSE Event Pub/Sub)                         │
+                                               ┌──────────┴──────────┐
+                                               ▼                     ▼
+                                        Tool Calling /      Context Compaction
+                                        RAG Retrieval       (Micro & Macro)
+                                               │                     │
+                                               ▼                     ▼
+                                        [ask_user pause]    Watermarked Summary
+                                        (Status: WAITING)   (Tokens kept in budget)
 ```
 
-Agents select RAG behavior with `off`, `auto`, or `agentic`. Knowledge-base retrieval separately supports `vector`, `fulltext`, or `hybrid` search, with optional reranking.
+**Key Lifecycle Components:**
+1. **Durable AgentRun**: Starting a run dispatches a Celery task and immediately returns `202 Accepted` with a `run_id`. The client establishes an SSE stream (`/chat/runs/{run_id}/stream`) and can disconnect or reconnect (`from_sequence`) without interrupting background tool execution.
+2. **AgentLoop ReAct Engine**: Manages the iterative reasoning and tool-calling cycle (`max_iterations`, timeouts, tool credential injection).
+3. **Three-Level Context Compaction**:
+   - **Micro Compaction**: Automatically truncates and summarizes oversized tool output payloads and raw base64 data to preserve token budgets.
+   - **Macro Compaction**: When conversation tokens cross the configured `trigger_budget`, the engine computes safe turn boundaries (`_round_is_complete`), runs an LLM summarization turn over older messages, inserts a `context_summary` message with watermark tracking, and retains recent turns in verbatim form.
+   - **Preflight & Recovery Guards**: Token headroom reservations and automatic retries on context-length provider errors.
+4. **Human-in-the-Loop (`ask_user`) Suspension & Resumption**: When `ask_user` is called, `AgentLoop` enters `AgentRunStatus.WAITING` with pending question metadata. Submitting answers via `POST /chat/runs/{run_id}/answers` takes an ORM row lock (`select_for_update()`), validates payloads, and resumes the active run seamlessly.
 
-#### 3. Document Processing Flow
-
-```
-Upload → FastAPI → Celery knowledge queue → MarkItDown → Text Extraction
-                                             ↓
-                                           Chunking (characters)
-                                             ↓
-                                      Embedding Generation
-                                             ↓
-                             Qdrant vector + pg_search lexical index
-                                             ↓
-                                  Status Update (PostgreSQL)
-```
-
-#### 4. Workflow Execution Flow
+#### 3. Workflow Engine Execution Flow
 
 ```
-Trigger → FastAPI → Celery workflow queue → Workflow Orchestrator
-                                             ↓
-                                        Node Execution
-                              (user input/trigger/answer; LLM/Agent/media; tool/HTTP/sub-workflow; retrieval/document/file-to-URL; code/template/variable/parameter transforms; condition/classifier/iteration/loop/pause)
-                                             ↓
-                                        Result Storage
-                                             ↓
-                                      SSE Stream (if real-time)
+Trigger Event / User Input ──► FastAPI (POST /workflows/{id}/runs) ──► Celery Queue (workflow)
+                                                                              │
+                                                                              ▼
+                                                                   WorkflowOrchestrator
+                                                                              │
+                                                                   Parse Graph Definition
+                                                                              │
+                                                                   Topological ExecutionPlan
+                                                                   (Filter canvas comments)
+                                                                              │
+                                                                   Execute Node Pipeline
+                                                                   (LLM, Code, Condition,
+                                                                    Iteration, Pause...)
+                                                                              │
+                                                      ┌───────────────────────┴───────────────────────┐
+                                                      ▼                                               ▼
+                                               Node Execution                                  Pause Request
+                                            (ExecutionContext Flow)                          (Status: WAITING)
+                                                      │                                               │
+                                                      ▼                                               ▼
+                                               Completed Result                              Resume with Feedback
 ```
 
+**Key Engine Components:**
+1. **Graph Topological Planner (`ExecutionPlan`)**: Validates DAG dependencies, resolves parallel executable batches, and strips non-executable canvas documentation nodes (`NON_EXECUTABLE_NODE_TYPES = {"comment"}`).
+2. **Node Executors**: Modular executors for `llm`, `condition`, `code` (Sandbox), `iteration`/`loop`, `template`, `variable_aggregator`, `knowledge_retrieval`, `tool`, `agent`, and `sub_workflow`.
+3. **Pause & Resume Handlers**: Nodes requiring human review (`pause`) persist a `WorkflowPauseRequest` and suspend execution until approved or filled via `/runs/{id}/pause-requests/{req_id}/submit`.
 ## Scalability Considerations
 
 ### Horizontal Scaling

@@ -14,22 +14,35 @@ Agent/Workflow → API → Celery Queue (sandbox) → Sandbox Worker
                                   /workspace → current job/session directory
 ```
 
-Key properties:
+### Deep-Dive Bubblewrap Namespace & Mount Layout
 
-- **Real `/workspace` path**: the current job or session directory is bind-mounted read-write at `/workspace`, so Python, Node.js, native libraries, and child processes use the same path.
-- **Filesystem isolation**: sibling workspaces, `/app`, and `/app/uploads` are not mounted into the task namespace. Required system runtime directories and the dependency cache are mounted read-only.
-- **Process lifecycle isolation**: each execution uses a new process group; timeout handling terminates the whole group.
-- **Path protection**: input staging, file tools, and artifact collection reject workspace escapes and symlink traversal.
-- **Root-scan confinement**: direct Agent commands such as `find /` are normalized to `find /workspace`; commands launched from code still see only the minimal Bubblewrap filesystem.
-- **Bounded execution**: task timeout, output limits, workspace disk checks, and worker container resource limits constrain runaway jobs.
-- **Network policy is separate**: Bubblewrap does not unshare the network namespace. Restrict outbound access with Docker or Kubernetes network policy when required.
-- **Automatic cleanup**: one-off jobs are cleaned immediately after execution; sessions are cleaned on TTL expiry.
+When filesystem isolation is enabled (`SANDBOX_FILESYSTEM_ISOLATION_ENABLED=true`), the sandbox launcher wraps executions in a dedicated `bwrap` process configured with strict namespace isolation:
 
-| Runtime | Base Environment |
-|---|---|
-| Python | Python 3.13 with standard library and configured packages |
-| JavaScript | Node.js 22 with core modules and configured packages |
+```text
+bwrap \
+  --unshare-user --unshare-pid --unshare-ipc --unshare-uts \
+  --die-with-parent --hostname clouisle-sandbox \
+  --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /etc /etc \
+  --dir /proc --dev /dev \
+  --bind <host_job_dir> /workspace \
+  --bind <host_job_dir>/tmp /tmp \
+  --chdir /workspace \
+  -- <command> <args...>
+```
 
+#### 1. Namespace & Process Confinement
+- **Unshared Namespaces**: `--unshare-user`, `--unshare-pid`, `--unshare-ipc`, `--unshare-uts` create an isolated environment with its own process tree (PID 1 mapping), inter-process communication boundary, and isolated hostname (`clouisle-sandbox`).
+- **`--die-with-parent`**: Guarantees that all child processes inside the sandbox are instantly reaped if the supervising Celery worker exits or times out.
+
+#### 2. Filesystem Mount Table (`RUNTIME_READONLY_ROOTS`)
+- **Read-Only System Roots**: `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/etc` are mounted as `--ro-bind`, ensuring code cannot modify system binaries, Python site-packages, or OS configuration.
+- **Isolated Workspace Mapping**: The host job directory is mapped directly to `/workspace`. Code interacts with a standard, clean `/workspace` root regardless of where jobs are physically stored on the host.
+- **Dedicated `/tmp` Sub-mount**: The workspace contains an isolated `tmp` directory mounted at `/tmp` (`--bind <workspace>/tmp /tmp`), isolating temporary files from host `/tmp`.
+- **Logical Path Auto-Rewriting**: `_logical_workspace_path` and `_map_workspace_value` automatically rewrite command arguments and environment paths so tasks only ever see `/workspace/...`.
+
+#### 3. Container Runtimes & CJK Font Support
+- **Runtimes**: Pre-installed Python 3.13 (managed via `uv`), Node.js 22, and standard numerical computing toolchains.
+- **CJK Fonts Included**: The `clouisle-sandbox-worker` image packages `fontconfig`, `fonts-wqy-zenhei`, and `fonts-wqy-microhei` with `fc-cache -fv`. Because `/usr/share/fonts` is exposed via read-only bind mount, sandbox scripts generating charts (`matplotlib`, `seaborn`, `Pillow`) render Chinese, Japanese, and Korean text flawlessly without font missing boxes (`tofu`).
 ## Usage in the Platform
 
 ### Code Tool
