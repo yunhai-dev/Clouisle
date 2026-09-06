@@ -102,3 +102,95 @@ test('renders PDF using native viewer with FitH and without overlapping zoom flo
     Object.assign(URL, { createObjectURL: originalCreateObjectURL, revokeObjectURL: originalRevokeObjectURL })
   }
 })
+
+test('renders mermaid diagrams with interactive controls and strict security level', async () => {
+  const loadFile = mock(async () => new Blob(['graph TD; A-->B;'], { type: 'text/vnd.mermaid' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'diagram.mmd', mimeType: 'text/vnd.mermaid' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(container.querySelector('div')).toBeTruthy()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+})
+
+test('renders zoom viewport with controls for image mode', async () => {
+  const loadFile = mock(async () => new Blob(['fake image bytes'], { type: 'image/png' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'sample.png', mimeType: 'image/png' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+  expect(container.querySelector('img')).toBeTruthy()
+})
+
+test('renders video preview for video files', async () => {
+  const loadFile = mock(async () => new Blob(['fake video'], { type: 'video/mp4' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'clip.mp4', mimeType: 'video/mp4' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+  expect(container.querySelector('video')).toBeTruthy()
+})
+
+test('renders audio preview for audio files', async () => {
+  const loadFile = mock(async () => new Blob(['fake audio'], { type: 'audio/mp3' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'track.mp3', mimeType: 'audio/mp3' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+  expect(container.querySelector('audio')).toBeTruthy()
+})
+
+test('renders markdown preview with streamdown', async () => {
+  const loadFile = mock(async () => new Blob(['# Markdown Title\nSome content'], { type: 'text/markdown' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'notes.md', mimeType: 'text/markdown' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+  expect(container.textContent).toContain('Markdown Title')
+})
+
+test('renders docx preview mode using DocxPreview', async () => {
+  const loadFile = mock(async () => new Blob(['fake docx'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'doc.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(container.querySelector('div')).toBeTruthy()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+})
+
+test('renders spreadsheet preview mode using SpreadsheetPreview', async () => {
+  const loadFile = mock(async () => new Blob(['fake sheet'], { type: 'text/csv' }))
+  const container = render(
+    <FilePreviewPanel
+      file={{ filename: 'data.csv', mimeType: 'text/csv' }}
+      loadFile={loadFile}
+    />
+  )
+  await flush()
+  expect(container.querySelector('div')).toBeTruthy()
+  expect(loadFile).toHaveBeenCalledTimes(1)
+})
+

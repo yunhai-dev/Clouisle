@@ -80,8 +80,10 @@ mock.module('@/lib/api', () => ({
 }))
 mock.module('@/lib/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }))
 mock.module('@/lib/utils/message-converter', () => ({ convertBackendMessages }))
+const removeRunSnapshot = mock(() => {})
 mock.module('@/hooks/use-chat', () => ({
   getStoredRunSnapshot,
+  removeRunSnapshot,
   useChat: (options: { onConversationChange?: (conversationId: string) => void }) => {
     chatOptions = options
     return {
@@ -330,6 +332,18 @@ describe('PublicChatPage', () => {
     expect(renderer!.root.findAllByType('i').filter((node) => node.props.className === 'h-4 w-4 shrink-0 animate-spin text-muted-foreground')).toHaveLength(1)
   })
 
+  test('removes stored snapshot for completed background conversation', async () => {
+    getStoredRunSnapshot.mockImplementation((agentId: string, conversationId: string) => (
+      agentId === 'agent-1' && conversationId === 'conv-1' ? { runId: 'run-1', lastSequence: 0 } : null
+    ))
+    getRunStatus.mockResolvedValue({ status: 'completed' })
+
+    render()
+    await flush()
+
+    expect(getRunStatus).toHaveBeenCalledWith('agent-1', 'run-1')
+    expect(removeRunSnapshot).toHaveBeenCalledWith('agent-1', 'conv-1')
+  })
   test('places pending ask_user above the composer and forwards final answers', async () => {
     const submitAskUser = mock(async () => undefined)
     chatState.messages = [{

@@ -1,8 +1,8 @@
 import { parseToolResultOutput } from '@/lib/utils/tool-result'
 import type { ChatMessage, FilePart, ToolCallPart } from './types'
 
-export type { FilePreviewMode as ArtifactPreviewMode } from '@/components/file-preview'
-import { getFilePreviewMode, isFilePreviewable } from '@/components/file-preview'
+export type { FilePreviewMode as ArtifactPreviewMode } from '@/components/file-preview/file-preview-types'
+import { getFilePreviewMode, isFilePreviewable } from '@/components/file-preview/file-preview-types'
 
 /** Return the renderer used by the artifact preview panel for a file. */
 export function getArtifactPreviewMode(
